@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.3) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.4) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -6,7 +6,7 @@ let meetingPointMarker = null; // Синий - Место встречи (из B
 let routeStartMarker = null;   // Зеленый - Старт маршрута (из X,Y, устанавливается кликом)
 
 let currentRecordId = null;
-let currentTableId = null; // Должен быть установлен через grist.onOptions
+let currentTableId = null; // Будет установлен через grist.onOptions или getEnsuredTableId
 const apiKey = 'AIzaSyC-NbhYb2Dh4wRcJnVADh3KU7IINUa6pB8'; // ВАШ API КЛЮЧ!
 const MARKER_ZOOM_LEVEL = 15;
 
@@ -61,7 +61,7 @@ function initMap() {
     try {
         map = L.map('map').setView([31.771959, 35.217018], 8);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: 'OSM' }).addTo(map);
-        map.on('click', handleMapClick);
+        map.on('click', handleMapClick); // handleMapClick теперь async
         setupGrist();
     } catch (e) { console.error("ОШИБКА initMap:", e); }
 }
@@ -89,7 +89,7 @@ function setupGrist() {
         ]
     });
     grist.onOptions(handleOptionsUpdate);
-    grist.onRecord(handleGristRecordUpdate);
+    grist.onRecord(handleGristRecordUpdate); // handleGristRecordUpdate теперь async
     console.log("DEBUG: Grist API готов.");
 }
 
@@ -99,10 +99,41 @@ function handleOptionsUpdate(options, interaction) {
     if (currentTableId) {
         console.log(`DEBUG: Table ID установлен через onOptions: ${currentTableId}`);
     } else {
-        console.error("ОШИБКА КРИТИЧЕСКАЯ: Table ID не был предоставлен виджету через grist.onOptions. Виджет не сможет обновлять данные. Убедитесь, что виджет связан с таблицей в Grist.");
-        // alert("Ошибка конфигурации виджета: не удалось определить таблицу. Обновление данных невозможно."); // Можно раскомментировать для пользователя
+        console.warn("ПРЕДУПРЕЖДЕНИЕ: Table ID не был предоставлен виджету через grist.onOptions. Попытка получить его будет при первой необходимости.");
     }
 }
+
+/**
+ * Асинхронно получает и кэширует tableId.
+ * @returns {Promise<string|null>} ID таблицы или null, если не удалось получить.
+ */
+async function getEnsuredTableId() {
+    if (currentTableId) {
+        console.log(`DEBUG: getEnsuredTableId - используем кэшированный currentTableId: ${currentTableId}`);
+        return currentTableId;
+    }
+    console.log("DEBUG: getEnsuredTableId - currentTableId is null, пытаемся получить через grist.selectedTable.getTableId()");
+    if (grist.selectedTable && typeof grist.selectedTable.getTableId === 'function') {
+        try {
+            const id = await grist.selectedTable.getTableId();
+            if (id) {
+                currentTableId = id; // Кэшируем
+                console.log(`DEBUG: getEnsuredTableId - Table ID получен и кэширован: ${currentTableId}`);
+                return currentTableId;
+            } else {
+                console.warn("ПРЕДУПРЕЖДЕНИЕ: getEnsuredTableId - grist.selectedTable.getTableId() вернул falsy:", id);
+                return null;
+            }
+        } catch (e) {
+            console.error("ОШИБКА: getEnsuredTableId - ошибка при вызове grist.selectedTable.getTableId():", e);
+            return null;
+        }
+    } else {
+        console.warn("ПРЕДУПРЕЖДЕНИЕ: getEnsuredTableId - grist.selectedTable или getTableId недоступны.");
+        return null;
+    }
+}
+
 
 function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDraggable, dragEndCallback) {
     const latLng = L.latLng(latLngLiteral.lat, latLngLiteral.lng);
@@ -127,13 +158,14 @@ function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDrag
 }
 
 async function processMeetingPointData(lat, lng) {
-    if (!currentRecordId || !currentTableId) { // Прямая проверка глобального currentTableId
-        console.warn(`ПРЕДУПРЕЖДЕНИЕ: Нет Record ID (${currentRecordId}) или Table ID (${currentTableId}) для processMeetingPointData.`);
-        if (!currentTableId) alert("Ошибка: Таблица для обновления данных Места Встречи не определена.");
+    const tableId = await getEnsuredTableId();
+    if (!currentRecordId || !tableId) {
+        console.warn(`ПРЕДУПРЕЖДЕНИЕ: Нет Record ID (${currentRecordId}) или Table ID (${tableId}) для processMeetingPointData.`);
+        if (!tableId) alert("Ошибка: Таблица для обновления данных Места Встречи не определена.");
         return;
     }
     
-    console.log(`DEBUG: processMeetingPointData для Места Встречи: ${lat}, ${lng} (Table: ${currentTableId})`);
+    console.log(`DEBUG: processMeetingPointData для Места Встречи: ${lat}, ${lng} (Table: ${tableId})`);
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
 
@@ -165,7 +197,7 @@ async function processMeetingPointData(lat, lng) {
     const updData = { D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, I: ttTA, J: ttJer, K: ttHai, L: ttBS };
     Object.keys(updData).forEach(k => (updData[k] === undefined || updData[k] === null || updData[k] === '') && delete updData[k]);
     try {
-        await grist.docApi.applyUserActions([['UpdateRecord', currentTableId, currentRecordId, updData]]);
+        await grist.docApi.applyUserActions([['UpdateRecord', tableId, currentRecordId, updData]]);
         console.log("DEBUG: Данные адреса/времени для Места встречи обновлены в Grist.");
     } catch (e) { console.error("ОШИБКА обновления Grist (Meeting Point Data):", e); }
 }
@@ -175,15 +207,17 @@ async function handleGristRecordUpdate(record, mappings) {
     currentRecordId = record?.id || null;
     console.log("DEBUG: Current Record ID:", currentRecordId);
 
-    // currentTableId должен быть установлен к этому моменту через handleOptionsUpdate
-    // Если он не установлен, то processMeetingPointData и другие операции записи не сработают корректно.
-
     if (!map) { console.warn("ПРЕДУПРЕЖДЕНИЕ: Карта не инициализирована."); return; }
 
     if (meetingPointMarker) { meetingPointMarker.remove(); meetingPointMarker = null; }
     if (routeStartMarker) { routeStartMarker.remove(); routeStartMarker = null; }
 
     if (!record) { console.log("DEBUG: Запись Grist не выбрана."); return; }
+
+    // Попытка получить tableId, если он еще не установлен (важно для processMeetingPointData)
+    if (currentRecordId && !currentTableId) {
+        await getEnsuredTableId();
+    }
 
     if (typeof record.X === 'number' && typeof record.Y === 'number') {
         const routeStartLabel = record.HikeStartLabel || `Старт маршрута (ID: ${record.id || 'N/A'})`;
@@ -198,7 +232,7 @@ async function handleGristRecordUpdate(record, mappings) {
         if (currentTableId) { // Вызываем processMeetingPointData только если tableId известен
             await processMeetingPointData(record.B, record.C);
         } else {
-            console.warn("ПРЕДУПРЕЖДЕНИЕ: Table ID не установлен, processMeetingPointData не будет вызван для Места Встречи.");
+            console.warn("ПРЕДУПРЕЖДЕНИЕ: Table ID не установлен, processMeetingPointData не будет вызван для Места Встречи при загрузке записи.");
         }
     } else {
         console.log("DEBUG: Координаты для 'Места встречи' (B,C) отсутствуют или невалидны.");
@@ -210,10 +244,11 @@ async function handleGristRecordUpdate(record, mappings) {
 }
 
 async function updateGristCoordinates(markerType, lat, lng) {
-    // Используем глобальный currentTableId, который должен быть установлен handleOptionsUpdate
-    if (!currentRecordId || !currentTableId) {
-        console.warn(`ПРЕДУПРЕЖДЕНИЕ: Нет Record ID (${currentRecordId}) или Table ID (${currentTableId}) для updateGristCoordinates (${markerType})`);
-        if (!currentTableId) { // Дополнительное уведомление, если именно tableId отсутствует
+    const tableId = await getEnsuredTableId(); // Получаем tableId перед каждой операцией записи
+
+    if (!currentRecordId || !tableId) {
+        console.warn(`ПРЕДУПРЕЖДЕНИЕ: Нет Record ID (${currentRecordId}) или Table ID (${tableId}) для updateGristCoordinates (${markerType})`);
+        if (!tableId) {
              alert("Ошибка: Таблица для обновления не определена. Проверьте конфигурацию виджета или выберите запись снова.");
         }
         return;
@@ -228,43 +263,50 @@ async function updateGristCoordinates(markerType, lat, lng) {
         console.error("ОШИБКА: Неизвестный тип маркера для обновления координат:", markerType); return;
     }
     try {
-        await grist.docApi.applyUserActions([['UpdateRecord', currentTableId, currentRecordId, updateData]]);
+        await grist.docApi.applyUserActions([['UpdateRecord', tableId, currentRecordId, updateData]]);
         console.log(`DEBUG: Координаты Grist для "${markerType}" обновлены:`, updateData);
     } catch (e) { console.error(`ОШИБКА обновления Grist (${markerType} coords):`, e); }
 }
 
-function onMeetingPointMarkerDragEnd(event) {
+async function onMeetingPointMarkerDragEnd(event) { // Добавили async
     const pos = event.target.getLatLng();
     console.log(`DEBUG: "Место встречи" (синий) перетащено: ${pos.lat}, ${pos.lng}`);
-    updateGristCoordinates('meetingPoint', pos.lat, pos.lng);
-    if (currentTableId) { // Вызываем processMeetingPointData только если tableId известен
-        processMeetingPointData(pos.lat, pos.lng);
+    await updateGristCoordinates('meetingPoint', pos.lat, pos.lng); // Добавили await
+    // processMeetingPointData будет вызван после успешного обновления координат,
+    // так как он сам проверяет tableId.
+    const tableId = await getEnsuredTableId();
+    if (tableId) {
+        await processMeetingPointData(pos.lat, pos.lng); // Добавили await
     }
 }
 
-function onRouteStartMarkerDragEnd(event) {
+async function onRouteStartMarkerDragEnd(event) { // Добавили async
     const pos = event.target.getLatLng();
     console.log(`DEBUG: "Старт маршрута" (зеленый) перетащен: ${pos.lat}, ${pos.lng}`);
-    updateGristCoordinates('routeStart', pos.lat, pos.lng);
+    await updateGristCoordinates('routeStart', pos.lat, pos.lng); // Добавили await
 }
 
 async function handleMapClick(e) {
     if (!e.latlng) { console.warn("ПРЕДУПРЕЖДЕНИЕ: Клик без координат."); return; }
     
-    if (!currentRecordId && grist.selectedRecord) {
+    // Сначала получаем currentRecordId
+    if (!currentRecordId && grist.selectedRecord && typeof grist.selectedRecord.get === 'function') {
         try {
-            const rec = await grist.selectedRecord.get();
-            if (rec && rec.id) currentRecordId = rec.id;
-            console.log(`DEBUG: handleMapClick - currentRecordId получен через selectedRecord: ${currentRecordId}`);
+            const rec = await grist.selectedRecord.get(); // Добавили await
+            if (rec && rec.id) {
+                currentRecordId = rec.id;
+                console.log(`DEBUG: handleMapClick - currentRecordId получен через selectedRecord.get(): ${currentRecordId}`);
+            }
         } catch (err) { console.warn("Не удалось получить selectedRecord.id при клике", err); }
     }
 
     if (!currentRecordId) { alert("Сначала выберите строку в Grist."); return; }
 
-    // currentTableId должен быть установлен через handleOptionsUpdate
-    if (!currentTableId) {
+    // Затем убеждаемся, что есть tableId
+    const tableId = await getEnsuredTableId();
+    if (!tableId) {
         alert("Ошибка: Таблица для обновления не определена. Невозможно установить Старт маршрута. Проверьте конфигурацию виджета или попробуйте выбрать запись снова.");
-        console.error("ОШИБКА: handleMapClick - currentTableId не определен. Обновление невозможно.");
+        console.error("ОШИБКА: handleMapClick - Table ID не определен после getEnsuredTableId. Обновление невозможно.");
         return;
     }
 
@@ -275,7 +317,7 @@ async function handleMapClick(e) {
     const routeStartLabel = `Старт маршрута (ID: ${currentRecordId})`;
     console.log(`DEBUG: Клик для установки "Старт маршрута" (зеленый): ${lat}, ${lng}. Обновление X,Y.`);
     routeStartMarker = updateOrCreateMarker(routeStartMarker, clickPosition, routeStartLabel, greenIcon, true, onRouteStartMarkerDragEnd);
-    await updateGristCoordinates('routeStart', lat, lng);
+    await updateGristCoordinates('routeStart', lat, lng); // Обновляет X, Y в Grist
 }
 
 function checkApis() {
@@ -286,6 +328,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.3): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.4): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
