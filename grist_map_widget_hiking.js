@@ -1,21 +1,34 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия для GitHub, исправленная) ===
- 
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия с тремя маркерами) ===
+
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map; // Объект Leaflet Map
-let marker = null; // Объект Leaflet Marker
+let startMarker = null;  // Маркер старта (красный)
+let meetingMarker = null; // Маркер места встречи (синий)
+let finishMarker = null; // Маркер финиша (зеленый, устанавливается кликом)
+
 let currentRecordId = null; // ID выбранной строки Grist
 let currentTableId = null;  // ID таблицы Grist
-const apiKey = 'AIzaSyC-NbhYb2Dh4wRcJnVADh3KU7IINUa6pB8'; // ВАЖНО: Ваш ключ API для Google сервисов. Убедитесь, что он активен для Maps JavaScript API, Directions API и Cloud Translation API в Google Cloud Console.
-const MARKER_ZOOM_LEVEL = 15; // Уровень зума при переходе к маркеру
+const apiKey = 'AIzaSyC-NbhYb2Dh4wRcJnVADh3KU7IINUa6pB8'; // ВАШ API КЛЮЧ!
+const MARKER_ZOOM_LEVEL = 15;
 
-// === ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ПЕРЕВОДА ===
-/**
- * Переводит текст с помощью Google Cloud Translation API V2.
- * @param {string} text - Текст для перевода.
- * @param {string} targetLang - Целевой язык (например, 'ru').
- * @param {string} apiKey - API ключ для Google Translation API.
- * @returns {Promise<string>} Промис, разрешающийся переведенным текстом или исходным текстом в случае ошибки.
- */
+// === ИКОНКИ МАРКЕРОВ ===
+const redIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FF0000" width="28px" height="28px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>`;
+const blueIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#0000FF" width="28px" height="28px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>`;
+const greenIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#008000" width="28px" height="28px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>`;
+
+const commonIconOptions = {
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -28],
+    tooltipAnchor: [14, -18]
+};
+
+const redIcon = L.icon({ ...commonIconOptions, iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(redIconSVG)}` });
+const blueIcon = L.icon({ ...commonIconOptions, iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(blueIconSVG)}` });
+const greenIcon = L.icon({ ...commonIconOptions, iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(greenIconSVG)}` });
+
+
+// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (translateText, getTravelTime - без изменений) ===
 async function translateText(text, targetLang, apiKey) {
     if (!text || typeof text !== 'string' || !text.trim()) {
         console.log("DEBUG: translateText - пустой или невалидный текст, возвращаем пустую строку.");
@@ -29,90 +42,68 @@ async function translateText(text, targetLang, apiKey) {
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({ q: text, target: targetLang })
         });
-        const responseBody = await response.text(); // Сначала получаем тело как текст для отладки
+        const responseBody = await response.text();
         console.log(`DEBUG: Статус ответа Translation API для "${text}": ${response.status}`);
-
         if (!response.ok) {
             console.error(`DEBUG: Ошибка Translation API (${response.status}) для "${text}". Тело ответа: ${responseBody}`);
             throw new Error(`Translation API error ${response.status} for text: "${text}"`);
         }
-
-        const data = JSON.parse(responseBody); // Парсим JSON после проверки response.ok
-
+        const data = JSON.parse(responseBody);
         if (data?.data?.translations?.[0]?.translatedText) {
             const translated = data.data.translations[0].translatedText;
             console.log(`DEBUG: Перевод успешен: "${text}" -> "${translated}"`);
-            // Декодируем HTML-сущности, которые может вернуть Google Translate (например, &#39; для ')
             const tempElem = document.createElement('textarea');
             tempElem.innerHTML = translated;
             return tempElem.value;
         } else {
             console.warn(`DEBUG: Translation API вернул неожиданную структуру для "${text}". Ответ:`, data);
-            return text; // Возвращаем исходный текст
+            return text;
         }
     } catch (error) {
         console.error(`DEBUG: Сбой fetch или парсинга JSON при переводе для "${text}":`, error);
-        return text; // Возвращаем исходный текст в случае ошибки
+        return text;
     }
 }
 
-/**
- * Получает время в пути и проверяет предупреждения для одного маршрута с помощью Google Directions API.
- * @param {google.maps.LatLngLiteral} originLatLng - Координаты начала.
- * @param {google.maps.LatLngLiteral} destinationLatLng - Координаты конца.
- * @param {Date} departureTime - Время отправления.
- * @returns {Promise<string>} Промис, разрешающийся текстом времени в пути (например, "1 час 20 мин") или сообщением об ошибке.
- */
 async function getTravelTime(originLatLng, destinationLatLng, departureTime) {
-    let travelTimeResult = 'N/A'; // Значение по умолчанию
+    let travelTimeResult = 'N/A';
     console.log(`DEBUG: Запрос времени в пути Google Directions от ${JSON.stringify(originLatLng)} до ${JSON.stringify(destinationLatLng)} на ${departureTime.toISOString()}`);
-
     try {
         if (typeof google === 'undefined' || !google?.maps?.DirectionsService) {
             console.error("DEBUG: Google Maps API или DirectionsService не загружен.");
-            throw new Error("Google Directions Service not loaded. Check API key and if 'Directions API' is enabled in Google Cloud Console.");
+            throw new Error("Google Directions Service not loaded.");
         }
         const service = new google.maps.DirectionsService();
         const directionsRequest = {
             origin: originLatLng,
             destination: destinationLatLng,
             travelMode: google.maps.TravelMode.DRIVING,
-            drivingOptions: {
-                departureTime: departureTime,
-                trafficModel: google.maps.TrafficModel.BEST_GUESS // Учитывает текущий и прогнозируемый трафик
-            }
+            drivingOptions: { departureTime: departureTime, trafficModel: google.maps.TrafficModel.BEST_GUESS }
         };
-
         const directionsResult = await new Promise((resolve, reject) => {
             service.route(directionsRequest, (response, status) => {
-                if (status === google.maps.DirectionsStatus.OK) {
-                    resolve(response);
-                } else {
+                if (status === google.maps.DirectionsStatus.OK) resolve(response);
+                else {
                     console.error(`DEBUG: Ошибка Google Directions API: статус ${status}. Запрос:`, directionsRequest);
-                    reject(new Error(`Directions status: ${status}. This might be due to API key issues, 'Directions API' not enabled, or no route found.`));
+                    reject(new Error(`Directions status: ${status}.`));
                 }
             });
         });
         console.log("DEBUG: Ответ Google Directions:", directionsResult);
-
         if (directionsResult.routes?.[0]?.legs?.[0]) {
             const leg = directionsResult.routes[0].legs[0];
             travelTimeResult = leg.duration_in_traffic ? leg.duration_in_traffic.text : (leg.duration ? leg.duration.text : 'Время не найдено');
             console.log(`DEBUG: Найдено время в пути: ${travelTimeResult}`);
-
             const warnings = directionsResult.routes[0].warnings;
             if (warnings && warnings.length > 0) {
                 console.warn("DEBUG: Найдены ПРЕДУПРЕЖДЕНИЯ от Google Directions:", warnings);
-                const borderKeywords = ['border', 'границ', 'checkpoint', 'crossing', 'territories', 'territory', 'таможн']; // Добавил "таможн"
-                // Предупреждения могут быть не строками, проверяем тип
+                const borderKeywords = ['border', 'границ', 'checkpoint', 'crossing', 'territories', 'territory', 'таможн'];
                 const hasBorderWarning = warnings.some(w => typeof w === 'string' && borderKeywords.some(k => w.toLowerCase().includes(k.toLowerCase())));
                 if (hasBorderWarning) {
                     console.error("!!! ОБНАРУЖЕНО ПРЕДУПРЕЖДЕНИЕ О ВОЗМОЖНОМ ПЕРЕСЕЧЕНИИ ГРАНИЦЫ/ОСОБОЙ ЗОНЫ !!!");
                     travelTimeResult += " (ПРЕДУПРЕЖДЕНИЕ О ГРАНИЦЕ!)";
                 }
-            } else {
-                console.log("DEBUG: Предупреждений по маршруту нет.");
-            }
+            } else console.log("DEBUG: Предупреждений по маршруту нет.");
         } else {
             console.warn("DEBUG: Google Directions не вернул маршрут или участок пути. Статус:", directionsResult.status);
             travelTimeResult = `Google: ${directionsResult.status || 'Маршрут/участок не найден'}`;
@@ -125,367 +116,327 @@ async function getTravelTime(originLatLng, destinationLatLng, departureTime) {
 }
 
 // === ОСНОВНЫЕ ФУНКЦИИ ВИДЖЕТА ===
-
-/**
- * Инициализация карты Leaflet.
- */
 function initMap() {
     console.log("DEBUG: Вызов initMap() для Leaflet.");
-    const initialCoords = [31.771959, 35.217018]; // Координаты для центра Израиля (примерно Иерусалим)
-    const initialZoom = 8; // Общий зум для страны
+    const initialCoords = [31.771959, 35.217018];
+    const initialZoom = 8;
     try {
         const mapDiv = document.getElementById('map');
-        if (!mapDiv) {
-            console.error("ОШИБКА: Контейнер для карты #map не найден в DOM!");
-            return;
-        }
+        if (!mapDiv) { console.error("ОШИБКА: Контейнер для карты #map не найден в DOM!"); return; }
         map = L.map('map').setView(initialCoords, initialZoom);
         console.log("DEBUG: Объект Leaflet Map создан.");
-
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: 'Картографические данные &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> участники'
         }).addTo(map);
         console.log("DEBUG: Слой тайлов OpenStreetMap добавлен.");
-
         map.on('click', handleMapClick);
         console.log("DEBUG: Обработчик клика по карте Leaflet добавлен.");
-
-        setupGrist(); // Настраиваем интеграцию с Grist после инициализации карты
-    } catch (e) {
-        console.error("ОШИБКА: Не удалось создать объект Leaflet Map:", e);
-    }
+        setupGrist();
+    } catch (e) { console.error("ОШИБКА: Не удалось создать объект Leaflet Map:", e); }
 }
 
-/**
- * Настройка взаимодействия с Grist API.
- */
 function setupGrist() {
     if (typeof grist === 'undefined' || !grist.ready) {
-        console.error("ОШИБКА: Grist API не найден или не готов. Убедитесь, что grist-plugin-api.js загружен.");
+        console.error("ОШИБКА: Grist API не найден или не готов.");
         return;
     }
     console.log("DEBUG: Настройка взаимодействия с Grist...");
     grist.ready({
-        requiredAccess: 'full', // Запрашиваем полный доступ
-        columns: [ // Определяем все колонки, с которыми будет работать виджет
-            { name: "A", type: 'Text', optional: true, title: 'Название (для метки)' },
-            { name: "B", type: 'Numeric', title: 'Широта' }, // Обязательное поле для отображения на карте
-            { name: "C", type: 'Numeric', title: 'Долгота' }, // Обязательное поле для отображения на карте
-            { name: "D", type: 'Text', optional: true, title: 'Город/Поселение (RU)' },
-            { name: "E", type: 'Text', optional: true, title: 'Район (RU)' },
-            { name: "F", type: 'Text', optional: true, title: 'Округ (RU)' },
-            { name: "H", type: 'Text', optional: true, title: 'Микрорайон/Деревня (RU)' },
-            { name: "I", type: 'Text', optional: true, title: 'Время в пути из Тель-Авива' },
-            { name: "J", type: 'Text', optional: true, title: 'Время в пути из Иерусалима' },
-            { name: "K", type: 'Text', optional: true, title: 'Время в пути из Хайфы' },
-            { name: "L", type: 'Text', optional: true, title: 'Время в пути из Беэр-Шевы' }
+        requiredAccess: 'full',
+        columns: [
+            // Колонки для Места Встречи (синий маркер)
+            { name: "A", type: 'Text', optional: true, title: 'Название (Место Встречи)' },
+            { name: "B", type: 'Numeric', title: 'Место Встречи Широта' },
+            { name: "C", type: 'Numeric', title: 'Место Встречи Долгота' },
+
+            // Колонки для Старта (красный маркер)
+            { name: "X", type: 'Numeric', optional: true, title: 'Старт Широта' },
+            { name: "Y", type: 'Numeric', optional: true, title: 'Старт Долгота' },
+            { name: "StartLabel", type: 'Text', optional: true, title: 'Название (Старт)' },
+
+            // Колонки для Финиша (зеленый маркер, устанавливается кликом)
+            { name: "FinishLat", type: 'Numeric', optional: true, title: 'Финиш Широта (клик)' },
+            { name: "FinishLng", type: 'Numeric', optional: true, title: 'Финиш Долгота (клик)' },
+            // Колонки для адреса и времени в пути ОТНОСЯТСЯ К ФИНИШУ
+            { name: "D", type: 'Text', optional: true, title: 'Финиш: Город/Поселение (RU)' },
+            { name: "E", type: 'Text', optional: true, title: 'Финиш: Район (RU)' },
+            { name: "F", type: 'Text', optional: true, title: 'Финиш: Округ (RU)' },
+            { name: "H", type: 'Text', optional: true, title: 'Финиш: Микрорайон/Деревня (RU)' },
+            { name: "I", type: 'Text', optional: true, title: 'К Финишу: Время из Тель-Авива' },
+            { name: "J", type: 'Text', optional: true, title: 'К Финишу: Время из Иерусалима' },
+            { name: "K", type: 'Text', optional: true, title: 'К Финишу: Время из Хайфы' },
+            { name: "L", type: 'Text', optional: true, title: 'К Финишу: Время из Беэр-Шевы' }
         ]
     });
-
-    grist.onOptions(handleOptionsUpdate); // Обработчик изменения настроек виджета (если есть)
-    grist.onRecord(handleGristRecordUpdate); // Обработчик выбора строки в Grist
-    console.log("DEBUG: Grist API готов, слушаем события выбора записей и опций...");
+    grist.onOptions(handleOptionsUpdate);
+    grist.onRecord(handleGristRecordUpdate);
+    console.log("DEBUG: Grist API готов, слушаем события.");
 }
 
-/**
- * Обрабатывает опции, переданные Grist (например, tableId при связывании виджета).
- */
 function handleOptionsUpdate(options, interaction) {
     console.log("DEBUG: Grist: Получено обновление опций:", options, "Interaction:", interaction);
     let foundTableId = null;
-    if (options && options.tableId) { // Стандартный способ получения tableId
-        foundTableId = options.tableId;
-    } else if (interaction && interaction.tableId) { // Альтернативный способ из объекта interaction
-        foundTableId = interaction.tableId;
-    }
-    // Можно добавить логику для получения tableId из кастомных настроек виджета, если они есть
+    if (options && options.tableId) foundTableId = options.tableId;
+    else if (interaction && interaction.tableId) foundTableId = interaction.tableId;
 
     if (foundTableId) {
         currentTableId = foundTableId;
         console.log(`DEBUG: Текущий Table ID установлен: ${currentTableId}`);
     } else {
-        console.warn("ПРЕДУПРЕЖДЕНИЕ: Не удалось найти tableId в опциях или interaction. Убедитесь, что виджет связан с таблицей в Grist.");
+        console.warn("ПРЕДУПРЕЖДЕНИЕ: Не удалось найти tableId. Убедитесь, что виджет связан с таблицей.");
         currentTableId = null;
     }
 }
 
-/**
- * Обработчик данных из Grist при выборе строки. Отображает маркер на карте.
- */
-function handleGristRecordUpdate(record, mappings) {
-    console.log("DEBUG: Grist: Получено обновление записи:", record, "Сопоставления (mappings):", mappings);
-    if (!map) {
-        console.warn("ПРЕДУПРЕЖДЕНИЕ: Карта не инициализирована при обновлении записи Grist.");
-        return;
+function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDraggable, dragEndCallback) {
+    const latLng = L.latLng(latLngLiteral.lat, latLngLiteral.lng);
+    if (!markerInstance) {
+        markerInstance = L.marker(latLng, { icon: icon, draggable: isDraggable, title: label }).addTo(map);
+        markerInstance.bindTooltip(label).openTooltip();
+        console.log(`DEBUG: Маркер создан. Метка: "${label}"`);
+    } else {
+        markerInstance.setLatLng(latLng);
+        if (markerInstance.getElement()) markerInstance.getElement().title = label;
+        if (markerInstance.getTooltip()) markerInstance.setTooltipContent(label);
+        else markerInstance.bindTooltip(label);
+        if (!markerInstance.isTooltipOpen()) markerInstance.openTooltip();
+        if (!map.hasLayer(markerInstance)) markerInstance.addTo(map);
+        if (markerInstance.options.icon !== icon) markerInstance.setIcon(icon); // Обновляем иконку, если необходимо
+        console.log(`DEBUG: Маркер обновлен. Метка: "${label}"`);
     }
 
-    currentRecordId = record ? record.id : null; // Сохраняем ID текущей выбранной записи
+    if (markerInstance._onDragEndListener) { // Удаляем старый обработчик
+        markerInstance.off('dragend', markerInstance._onDragEndListener);
+    }
+    if (isDraggable && dragEndCallback) { // Добавляем новый
+        markerInstance.on('dragend', dragEndCallback);
+        markerInstance._onDragEndListener = dragEndCallback;
+    }
+    return markerInstance;
+}
+
+function handleGristRecordUpdate(record, mappings) {
+    console.log("DEBUG: Grist: Получено обновление записи:", record);
+    if (!map) { console.warn("ПРЕДУПРЕЖДЕНИЕ: Карта не инициализирована."); return; }
+
+    currentRecordId = record ? record.id : null;
     console.log("DEBUG: Текущий выбранный Record ID:", currentRecordId);
 
-    if (!record || typeof record.id === 'undefined') { // Если запись не выбрана или невалидна
-        if (marker) {
-            marker.remove(); // Удаляем маркер с карты
-            marker = null;
-            console.log("DEBUG: Маркер удален, так как запись Grist не выбрана или невалидна.");
-        }
+    // Удаляем все маркеры перед обновлением, чтобы избежать дубликатов или старых маркеров
+    if (startMarker) { startMarker.remove(); startMarker = null; }
+    if (meetingMarker) { meetingMarker.remove(); meetingMarker = null; }
+    if (finishMarker) { finishMarker.remove(); finishMarker = null; }
+
+    if (!record) { // Если запись не выбрана
+        console.log("DEBUG: Запись Grist не выбрана, все маркеры удалены.");
         return;
     }
 
-    // Получаем координаты из полей B (Широта) и C (Долгота)
-    const lat = record.B;
-    const lng = record.C;
-
-    // Формируем метку для маркера, используя доступные поля A (Название) или D (Город)
-    const label = record.A || record.D || `ID Записи: ${record.id}`;
-
-    if (typeof lat === 'number' && !isNaN(lat) && typeof lng === 'number' && !isNaN(lng)) {
-        updateMarkerOnMap({ lat: lat, lng: lng }, label); // Обновляем маркер на карте
+    // Маркер Старта (красный)
+    if (typeof record.X === 'number' && typeof record.Y === 'number') {
+        const startLat = record.X;
+        const startLng = record.Y;
+        const startLabelText = record.StartLabel || `Старт (ID: ${record.id || 'N/A'})`;
+        startMarker = updateOrCreateMarker(startMarker, { lat: startLat, lng: startLng }, startLabelText, redIcon, true, onStartMarkerDragEnd);
     } else {
-        console.warn("ПРЕДУПРЕЖДЕНИЕ: Невалидные или отсутствующие координаты в записи Grist. Невозможно обновить маркер.", { lat, lng });
-        if (marker) { // Если координаты невалидны, удаляем существующий маркер
-            marker.remove();
-            marker = null;
-        }
+        console.log("DEBUG: Координаты для маркера Старта отсутствуют или невалидны.");
+    }
+
+    // Маркер Места Встречи (синий)
+    if (typeof record.B === 'number' && typeof record.C === 'number') {
+        const meetingLat = record.B;
+        const meetingLng = record.C;
+        const meetingLabel = record.A || `Место встречи (ID: ${record.id || 'N/A'})`;
+        meetingMarker = updateOrCreateMarker(meetingMarker, { lat: meetingLat, lng: meetingLng }, meetingLabel, blueIcon, true, onMeetingMarkerDragEnd);
+    } else {
+        console.log("DEBUG: Координаты для маркера Места Встречи отсутствуют или невалидны.");
+    }
+
+    // Маркер Финиша (зеленый) - из данных Grist (если был ранее установлен кликом)
+    if (typeof record.FinishLat === 'number' && typeof record.FinishLng === 'number') {
+        const finishLat = record.FinishLat;
+        const finishLng = record.FinishLng;
+        // Метка для финиша может быть более сложной, если адрес уже есть
+        const finishLabelText = record.D ? `${record.D}, ${record.F || ''}`.replace(/, $/, '') : `Финиш (ID: ${record.id || 'N/A'})`;
+        finishMarker = updateOrCreateMarker(finishMarker, { lat: finishLat, lng: finishLng }, finishLabelText, greenIcon, true, onFinishMarkerDragEnd);
+    } else {
+        console.log("DEBUG: Координаты для маркера Финиша (из Grist) отсутствуют или невалидны.");
+    }
+    
+    // Автоматическое масштабирование карты
+    const activeMarkers = [startMarker, meetingMarker, finishMarker].filter(m => m !== null);
+    if (activeMarkers.length > 1) {
+        const group = new L.featureGroup(activeMarkers);
+        map.fitBounds(group.getBounds().pad(0.2));
+    } else if (activeMarkers.length === 1) {
+        map.flyTo(activeMarkers[0].getLatLng(), MARKER_ZOOM_LEVEL);
     }
 }
-/**
- * Обрабатывает клик по карте: получает адрес (Nominatim), переводит (Google Translate),
- * получает время в пути из 4-х городов (Google Directions) и обновляет запись в Grist.
- * @param {L.LeafletMouseEvent} e - Событие клика Leaflet.
- */
-async function handleMapClick(e) {
-    if (!e.latlng) {
-        console.warn("ПРЕДУПРЕЖДЕНИЕ: Событие клика по карте не содержит координат (latlng).");
+
+async function updateGristCoordinates(markerType, lat, lng) {
+    if (!currentRecordId || !currentTableId) {
+        console.warn(`ПРЕДУПРЕЖДЕНИЕ: Невозможно обновить Grist для ${markerType}: currentRecordId или currentTableId не установлены.`);
         return;
     }
+
+    let updateData = {};
+    if (markerType === 'start') {
+        updateData = { X: lat, Y: lng };
+    } else if (markerType === 'meeting') {
+        updateData = { B: lat, C: lng };
+    } else if (markerType === 'finish') {
+        updateData = { FinishLat: lat, FinishLng: lng };
+    } else {
+        console.error("ОШИБКА: Неизвестный тип маркера для обновления Grist:", markerType);
+        return;
+    }
+
+    try {
+        console.log(`DEBUG: Обновление Grist для маркера ${markerType}. Запись: ${currentRecordId}, Таблица: ${currentTableId}, Данные:`, updateData);
+        await grist.docApi.applyUserActions([['UpdateRecord', currentTableId, currentRecordId, updateData]]);
+        console.log(`DEBUG: Координаты маркера ${markerType} успешно обновлены в Grist.`);
+    } catch (error) {
+        console.error(`ОШИБКА: Не удалось обновить координаты маркера ${markerType} в Grist:`, error);
+        alert(`Ошибка обновления координат ${markerType} в Grist: ${error.message}`);
+    }
+}
+
+function onStartMarkerDragEnd(event) {
+    const pos = event.target.getLatLng();
+    console.log(`DEBUG: Маркер Старта перетащен на: ${pos.lat}, ${pos.lng}`);
+    updateGristCoordinates('start', pos.lat, pos.lng);
+}
+
+function onMeetingMarkerDragEnd(event) {
+    const pos = event.target.getLatLng();
+    console.log(`DEBUG: Маркер Места Встречи перетащен на: ${pos.lat}, ${pos.lng}`);
+    updateGristCoordinates('meeting', pos.lat, pos.lng);
+}
+
+function onFinishMarkerDragEnd(event) {
+    const pos = event.target.getLatLng();
+    console.log(`DEBUG: Маркер Финиша перетащен на: ${pos.lat}, ${pos.lng}`);
+    updateGristCoordinates('finish', pos.lat, pos.lng);
+    // Примечание: Перетаскивание маркера финиша НЕ будет запускать геокодирование и расчет времени.
+    // Это делается только при клике по карте. Если нужно, можно добавить.
+}
+
+async function handleMapClick(e) {
+    if (!e.latlng) { console.warn("ПРЕДУПРЕЖДЕНИЕ: Клик по карте без координат."); return; }
     if (!currentRecordId) {
-        alert("Пожалуйста, сначала выберите строку в таблице Grist, которую вы хотите обновить координатами с карты.");
-        console.warn("ПРЕДУПРЕЖДЕНИЕ: Клик по карте, но не выбрана запись в Grist (currentRecordId is null). Обновление невозможно.");
+        alert("Пожалуйста, сначала выберите строку в таблице Grist для установки точки ФИНИША.");
+        console.warn("ПРЕДУПРЕЖДЕНИЕ: Клик по карте, но запись Grist не выбрана. Установка финиша невозможна.");
         return;
     }
 
     const lat = e.latlng.lat;
     const lng = e.latlng.lng;
-    const positionLeaflet = e.latlng; // Объект L.LatLng
-    const destinationLatLngGoogle = { lat: lat, lng: lng }; // Объект LatLngLiteral для Google API
-    const tempLabel = `Обработка координат... (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+    const tempLabel = `Финиш (обработка)... (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
 
-    console.log(`DEBUG: Клик по карте в точке: Широта ${lat}, Долгота ${lng}`);
-    updateMarkerOnMap(positionLeaflet, tempLabel); // Сразу обновляем маркер с временной меткой
+    console.log(`DEBUG: Клик по карте для установки ФИНИША: ${lat}, ${lng}`);
+    finishMarker = updateOrCreateMarker(finishMarker, { lat: lat, lng: lng }, tempLabel, greenIcon, true, onFinishMarkerDragEnd);
 
-    // --- Переменные для результатов ---
     let cityLevel_local = '', countyLevel_local = '', stateLevel_local = '', suburbLevel_local = '';
     let cityLevel_ru = '', countyLevel_ru = '', stateLevel_ru = '', suburbLevel_ru = '';
     let travelTimeTA = 'N/A', travelTimeJerusalem = 'N/A', travelTimeHaifa = 'N/A', travelTimeBeersheba = 'N/A';
 
-    // --- 1. Обратное геокодирование через Nominatim (OSM) ---
-    // Добавляем &accept-language=en для получения результатов на английском, что упрощает последующий перевод.
     const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`;
-    console.log("DEBUG: Запрос к Nominatim для обратного геокодирования:", nominatimUrl);
+    console.log("DEBUG: Запрос к Nominatim для финиша:", nominatimUrl);
     try {
         const response = await fetch(nominatimUrl);
-        if (!response.ok) {
-            console.error(`ОШИБКА: Nominatim API вернул статус ${response.status}`);
-            throw new Error(`Nominatim API error ${response.status}`);
-        }
+        if (!response.ok) { console.error(`ОШИБКА: Nominatim API (финиш) вернул ${response.status}`); throw new Error(`Nominatim API error ${response.status}`); }
         const data = await response.json();
-        console.log("DEBUG: Ответ от Nominatim:", data);
+        console.log("DEBUG: Ответ от Nominatim (финиш):", data);
         if (data && data.address) {
             const addr = data.address;
-            // Пытаемся получить наиболее релевантные части адреса
             cityLevel_local = addr.city || addr.town || addr.village || addr.hamlet || '';
-            countyLevel_local = addr.county || addr.state_district || ''; // Район/Округ (область)
-            stateLevel_local = addr.state || ''; // Более крупная административная единица (если есть)
-            suburbLevel_local = addr.suburb || addr.neighbourhood || addr.borough || addr.quarter || ''; // Микрорайон/Квартал
-            console.log(`DEBUG: Данные из Nominatim (локальные): Город='${cityLevel_local}', Район/Округ='${countyLevel_local}', Область/Штат='${stateLevel_local}', Микрорайон='${suburbLevel_local}'`);
-
-            // --- 2. Перевод компонентов адреса на русский ---
-            console.log("DEBUG: Перевод компонентов адреса на русский язык...");
+            countyLevel_local = addr.county || addr.state_district || '';
+            stateLevel_local = addr.state || '';
+            suburbLevel_local = addr.suburb || addr.neighbourhood || addr.borough || addr.quarter || '';
+            console.log(`DEBUG: Nominatim (финиш, локальные): Город='${cityLevel_local}', Район='${countyLevel_local}', Округ='${stateLevel_local}', Микрорайон='${suburbLevel_local}'`);
             [cityLevel_ru, countyLevel_ru, stateLevel_ru, suburbLevel_ru] = await Promise.all([
                 translateText(cityLevel_local, 'ru', apiKey),
                 translateText(countyLevel_local, 'ru', apiKey),
                 translateText(stateLevel_local, 'ru', apiKey),
                 translateText(suburbLevel_local, 'ru', apiKey)
             ]);
-            console.log(`DEBUG: Переведенные компоненты: Город(D)='${cityLevel_ru}', Район/Округ(E)='${countyLevel_ru}', Область/Штат(F)='${stateLevel_ru}', Микрорайон(H)='${suburbLevel_ru}'`);
-        } else {
-            console.warn("ПРЕДУПРЕЖДЕНИЕ: Nominatim не вернул данные адреса или вернул неожиданную структуру.");
-            cityLevel_ru = "Адрес не найден"; // Запасное значение
-        }
-    } catch (error) {
-        console.error("ОШИБКА: Сбой обратного геокодирования Nominatim или перевода:", error);
-        cityLevel_ru = "Ошибка геокодирования"; // Запасное значение
-    }
+            console.log(`DEBUG: Переведенные (финиш): Город(D)='${cityLevel_ru}', Район(E)='${countyLevel_ru}', Округ(F)='${stateLevel_ru}', Микрорайон(H)='${suburbLevel_ru}'`);
+        } else { console.warn("ПРЕДУПРЕЖДЕНИЕ: Nominatim (финиш) не вернул адрес."); cityLevel_ru = "Адрес не найден"; }
+    } catch (error) { console.error("ОШИБКА: Nominatim (финиш) или перевод:", error); cityLevel_ru = "Ошибка геокода"; }
 
-    // --- 3. Расчет времени в пути через Google Directions Service для 4-х городов ---
-    // Логика для "следующей пятницы в 7 утра"
-    const now = new Date(); // Текущее время браузера пользователя
-    const departureDate = new Date(now.valueOf()); // Создаем клон для изменений
-
-    const currentDay = departureDate.getDay(); // 0 (Воскресенье) - 6 (Суббота)
+    const now = new Date();
+    const departureDate = new Date(now.valueOf());
+    const currentDay = departureDate.getDay();
     const currentHour = departureDate.getHours();
-    let daysToAdd = (5 - currentDay + 7) % 7; // 5 соответствует пятнице
-    if (daysToAdd === 0 && currentHour >= 7) { // Если сегодня пятница и уже 7 утра или позже
-        daysToAdd = 7; // то берем следующую пятницу
-    }
+    let daysToAdd = (5 - currentDay + 7) % 7;
+    if (daysToAdd === 0 && currentHour >= 7) daysToAdd = 7;
     departureDate.setDate(departureDate.getDate() + daysToAdd);
-    departureDate.setHours(7, 0, 0, 0); // Устанавливаем время на 7:00:00.000
-
-    console.log(`DEBUG: Расчет времени в пути на будущую дату отправления: ${departureDate.toString()} (локальное время браузера)`);
-
+    departureDate.setHours(7, 0, 0, 0);
+    console.log(`DEBUG: Расчет времени в пути (к финишу) на: ${departureDate.toString()}`);
     const origins = [
         { name: 'Тель-Авив', coords: { lat: 32.0853, lng: 34.7818 } },
         { name: 'Иерусалим', coords: { lat: 31.7683, lng: 35.2137 } },
         { name: 'Хайфа', coords: { lat: 32.7940, lng: 34.9896 } },
         { name: 'Беэр-Шева', coords: { lat: 31.2530, lng: 34.7915 } }
     ];
-
     try {
         const results = await Promise.all(
-            origins.map(origin => getTravelTime(origin.coords, destinationLatLngGoogle, departureDate))
+            origins.map(origin => getTravelTime(origin.coords, {lat, lng}, departureDate))
         );
         travelTimeTA = results[0] || 'N/A';
         travelTimeJerusalem = results[1] || 'N/A';
         travelTimeHaifa = results[2] || 'N/A';
         travelTimeBeersheba = results[3] || 'N/A';
-        console.log(`DEBUG: Получено время в пути: Тель-Авив=${travelTimeTA}, Иерусалим=${travelTimeJerusalem}, Хайфа=${travelTimeHaifa}, Беэр-Шева=${travelTimeBeersheba}`);
+        console.log(`DEBUG: Получено время в пути (к финишу): ТА=${travelTimeTA}, Иерус=${travelTimeJerusalem}, Хайфа=${travelTimeHaifa}, Б-Ш=${travelTimeBeersheba}`);
     } catch (error) {
-        // Ошибки из getTravelTime уже должны быть залогированы.
-        // Promise.all отклоняется, если хотя бы один из промисов отклонен.
-        console.error("ОШИБКА: Один или несколько запросов Google Directions завершились неудачей во время Promise.all.", error);
-        // Устанавливаем значения по умолчанию, если они не были переопределены успешными вызовами
-        travelTimeTA = travelTimeTA === 'N/A' ? 'Google: Ошибка' : travelTimeTA;
-        travelTimeJerusalem = travelTimeJerusalem === 'N/A' ? 'Google: Ошибка' : travelTimeJerusalem;
-        travelTimeHaifa = travelTimeHaifa === 'N/A' ? 'Google: Ошибка' : travelTimeHaifa;
-        travelTimeBeersheba = travelTimeBeersheba === 'N/A' ? 'Google: Ошибка' : travelTimeBeersheba;
+        console.error("ОШИБКА: Один или несколько запросов Google Directions (к финишу) завершились неудачей.", error);
+        travelTimeTA = 'Google: Ошибка'; travelTimeJerusalem = 'Google: Ошибка'; travelTimeHaifa = 'Google: Ошибка'; travelTimeBeersheba = 'Google: Ошибка';
     }
 
-    // --- 4. Обновление записи в Grist ---
-    // Формируем финальную метку для маркера на основе полученных данных
-    const finalLabel = cityLevel_ru && stateLevel_ru ? `${cityLevel_ru}, ${stateLevel_ru}` : (cityLevel_ru || `Точка (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
-    updateMarkerOnMap(positionLeaflet, finalLabel); // Обновляем маркер с финальной, более информативной меткой
-
-    let tableIdToUse = currentTableId;
-    // Попытка получить tableId из активной таблицы, если currentTableId не был установлен через onOptions
-    if (!tableIdToUse && grist.selectedTable?.getTableId) {
-        try {
-            const id = await grist.selectedTable.getTableId();
-            if (id) {
-                tableIdToUse = id;
-                currentTableId = id; // Сохраняем для будущих кликов, если получили таким способом
-                console.log(`DEBUG: Резервный способ: Table ID установлен из grist.selectedTable: ${tableIdToUse}`);
-            }
-        } catch (e) {
-            console.warn("ПРЕДУПРЕЖДЕНИЕ: Не удалось получить tableId из grist.selectedTable.getTableId() как резервный вариант:", e);
-        }
+    const finalFinishLabel = cityLevel_ru ? `${cityLevel_ru}, ${stateLevel_ru || ''}`.replace(/, $/, '') : `Финиш (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+    if (finishMarker) { // Обновляем тултип маркера финиша
+        finishMarker.setTooltipContent(finalFinishLabel);
+        if (finishMarker.getElement()) finishMarker.getElement().title = finalFinishLabel;
     }
 
-    if (currentRecordId !== null && tableIdToUse !== null && typeof tableIdToUse === 'string') {
-        console.log(`DEBUG: Попытка обновить запись Grist ID: ${currentRecordId} в таблице ID: ${tableIdToUse}`);
+    // Обновление Grist для финиша
+    if (currentRecordId && currentTableId) {
+        const updateDataForFinish = {
+            FinishLat: lat, FinishLng: lng,
+            D: cityLevel_ru, E: countyLevel_ru, F: stateLevel_ru, H: suburbLevel_ru,
+            I: travelTimeTA, J: travelTimeJerusalem, K: travelTimeHaifa, L: travelTimeBeersheba
+        };
+        Object.keys(updateDataForFinish).forEach(key => (updateDataForFinish[key] === undefined || updateDataForFinish[key] === null || updateDataForFinish[key] === '') && delete updateDataForFinish[key]);
+
         try {
-            if (!grist.docApi?.applyUserActions) {
-                console.error("ОШИБКА: grist.docApi или grist.docApi.applyUserActions недоступны.");
-                throw new Error("Grist docApi or applyUserActions method is not available.");
-            }
-            const updateData = {
-                'B': lat, 'C': lng, // Координаты
-                'D': cityLevel_ru, 'E': countyLevel_ru,
-                'F': stateLevel_ru, 'H': suburbLevel_ru, // Адресные компоненты
-                'I': travelTimeTA,         // Время в пути из Тель-Авива
-                'J': travelTimeJerusalem,  // Время в пути из Иерусалима
-                'K': travelTimeHaifa,      // Время в пути из Хайфы
-                'L': travelTimeBeersheba   // Время в пути из Беэр-Шевы
-            };
-
-            // Удаляем поля с undefined или null значениями из объекта updateData,
-            // чтобы не перезаписывать существующие значения в Grist пустыми, если данные не были получены.
-            Object.keys(updateData).forEach(key => (updateData[key] === undefined || updateData[key] === null) && delete updateData[key]);
-
-            const userActions = [ ['UpdateRecord', tableIdToUse, currentRecordId, updateData] ];
-            console.log("DEBUG: Применение действий пользователя Grist:", JSON.stringify(userActions, null, 2));
-            await grist.docApi.applyUserActions(userActions);
-            console.log(`DEBUG: Действие по обновлению записи Grist ${currentRecordId} успешно отправлено.`);
+            console.log(`DEBUG: Обновление Grist для ФИНИША. Запись: ${currentRecordId}, Таблица: ${currentTableId}, Данные:`, updateDataForFinish);
+            await grist.docApi.applyUserActions([['UpdateRecord', currentTableId, currentRecordId, updateDataForFinish]]);
+            console.log("DEBUG: Данные финиша успешно обновлены в Grist.");
         } catch (error) {
-            console.error(`ОШИБКА: Не удалось применить действия пользователя к Grist:`, error);
-            alert(`Ошибка обновления данных в Grist: ${error.message}`);
-        }
-    } else {
-        console.warn("ПРЕДУПРЕЖДЕНИЕ: Невозможно обновить запись Grist из-за невалидных параметров:", { currentRecordId, tableIdToUse });
-        if (currentRecordId === null) {
-            // Сообщение уже было показано выше, но можно добавить специфичное для этого этапа
-            // alert("Запись в Grist не выбрана. Кликните на строку в таблице, чтобы выбрать ее для обновления координат.");
-        } else if (tableIdToUse === null) {
-            alert("Не удалось определить таблицу Grist для обновления. Убедитесь, что виджет правильно связан с таблицей.");
+            console.error("ОШИБКА: Не удалось обновить данные финиша в Grist:", error);
+            alert(`Ошибка обновления данных финиша в Grist: ${error.message}`);
         }
     }
 }
 
-/**
- * Создает или обновляет маркер Leaflet на карте и плавно перемещает карту к нему.
- * @param {L.LatLng | {lat: number, lng: number}} position - Позиция для маркера (объект Leaflet LatLng или литерал {lat, lng}).
- * @param {string} label - Текст для всплывающей подсказки (tooltip) маркера.
- */
-function updateMarkerOnMap(position, label) {
-    if (!map) {
-        console.warn("ПРЕДУПРЕЖДЕНИЕ: Карта не инициализирована, невозможно обновить маркер.");
-        return;
-    }
-
-    // Преобразуем позицию в объект L.LatLng, если это необходимо
-    const latLng = (position instanceof L.LatLng) ? position : L.latLng(position.lat, position.lng);
-
-    if (!marker) { // Если маркер еще не создан
-        marker = L.marker(latLng, { title: label }).addTo(map); // title - для нативной подсказки браузера
-        marker.bindTooltip(label).openTooltip(); // bindTooltip - для кастомной подсказки Leaflet, openTooltip - чтобы сразу показать
-        console.log(`DEBUG: Маркер Leaflet создан. Позиция: ${latLng.toString()}, Метка: "${label}"`);
-    } else { // Если маркер уже существует, обновляем его
-        marker.setLatLng(latLng);
-        if (marker.getElement()) { // Обновляем нативный title, если элемент маркера доступен
-            marker.getElement().title = label;
-        }
-        // Обновляем существующий тултип Leaflet или создаем новый, если его нет
-        if (marker.getTooltip()) {
-            marker.setTooltipContent(label);
-        } else {
-            marker.bindTooltip(label);
-        }
-        if (!marker.isTooltipOpen()) { // Открываем тултип, если он был закрыт или только что создан
-            marker.openTooltip();
-        }
-        if (!map.hasLayer(marker)) { // На всякий случай, если маркер был удален с карты другим способом
-            marker.addTo(map);
-        }
-        console.log(`DEBUG: Маркер Leaflet обновлен. Позиция: ${latLng.toString()}, Метка: "${label}"`);
-    }
-    map.flyTo(latLng, MARKER_ZOOM_LEVEL); // Плавно перемещаем карту к маркеру
-}
-
-// === БЛОК РУЧНОЙ ИНИЦИАЛИЗАЦИИ (Ожидаем готовности Leaflet И Google Maps) ===
-/**
- * Проверяет готовность API Leaflet и Google Maps (включая DirectionsService).
- * Если оба API готовы, вызывает initMap(). В противном случае, повторяет проверку через 250 мс.
- */
 function checkApis() {
     console.log("DEBUG: === ВХОД в checkApis ===");
     const leafletReady = typeof L === 'object' && L !== null && typeof L.map === 'function';
-    // Критически важно проверить именно google.maps.DirectionsService, так как он нужен для расчета маршрутов
     const googleReady = typeof google === 'object' && typeof google.maps === 'object' && typeof google.maps.DirectionsService === 'function';
     console.log(`DEBUG: Статус готовности: Leaflet = ${leafletReady}, Google Maps (с DirectionsService) = ${googleReady}`);
 
     if (leafletReady && googleReady) {
-        console.log("DEBUG: Оба API (Leaflet и Google Maps с DirectionsService) готовы.");
-        initMap(); // Инициализируем карту, только когда все зависимости загружены
+        console.log("DEBUG: Оба API готовы.");
+        initMap();
     } else {
-        console.warn("ПРЕДУПРЕЖДЕНИЕ: Проверка API НЕ ПРОЙДЕНА. Одно или оба API (Leaflet или Google Maps DirectionsService) не готовы. Повторная попытка через 250 мс...");
-        setTimeout(checkApis, 250); // Повторяем проверку
+        console.warn("ПРЕДУПРЕЖДЕНИЕ: Проверка API НЕ ПРОЙДЕНА. Повторная попытка через 250 мс...");
+        setTimeout(checkApis, 250);
     }
-    console.log("DEBUG: === ВЫХОД из checkApis (возможен повторный вызов через setTimeout) ===");
+    console.log("DEBUG: === ВЫХОД из checkApis ===");
 }
 
-// === ТОЧКА ВХОДА: Начинаем проверку готовности API для инициализации виджета ===
 console.log("DEBUG: Вызов checkApis для запуска процесса инициализации виджета.");
-checkApis(); // Запускаем первоначальную проверку и последующую инициализацию
-
+checkApis();
 console.log("DEBUG: Скрипт grist_map_widget_hiking.js выполнен, процесс инициализации запущен.");
 // === КОНЕЦ СКРИПТА ===
