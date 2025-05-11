@@ -1,5 +1,5 @@
 // === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия для GitHub, исправленная) ===
-
+ 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map; // Объект Leaflet Map
 let marker = null; // Объект Leaflet Marker
