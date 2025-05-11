@@ -217,7 +217,7 @@ async function handleGristRecordUpdate(record, mappings) {
 
     if (!record) { console.log("DEBUG: Запись Grist не выбрана."); return; }
 
-    const tableId = await getEnsuredTableId(); // Получаем tableId здесь
+    const tableId = await getEnsuredTableId(); 
 
     if (typeof record.X === 'number' && typeof record.Y === 'number') {
         const routeStartLabel = record.HikeStartLabel || `Старт маршрута (ID: ${record.id || 'N/A'})`;
@@ -243,7 +243,7 @@ async function handleGristRecordUpdate(record, mappings) {
     else if (activeMarkers.length === 1) map.flyTo(activeMarkers[0].getLatLng(), MARKER_ZOOM_LEVEL);
 }
 
-async function updateGristCoordinates(markerType, lat, lng) { // Убрали tableId из параметров, будем получать его здесь
+async function updateGristCoordinates(markerType, lat, lng) { 
     const tableId = await getEnsuredTableId(); 
 
     if (!currentRecordId || !tableId) {
@@ -276,14 +276,14 @@ async function onMeetingPointMarkerDragEnd(event) {
         alert("Ошибка: Не удалось определить таблицу для обновления Места Встречи.");
         return;
     }
-    await updateGristCoordinates('meetingPoint', pos.lat, pos.lng); // tableId будет получен внутри updateGristCoordinates
-    await processMeetingPointData(pos.lat, pos.lng, tableId); // Передаем tableId явно
+    await updateGristCoordinates('meetingPoint', pos.lat, pos.lng); 
+    await processMeetingPointData(pos.lat, pos.lng, tableId); 
 }
 
 async function onRouteStartMarkerDragEnd(event) {
     const pos = event.target.getLatLng();
     console.log(`DEBUG: "Старт маршрута" (зеленый) перетащен: ${pos.lat}, ${pos.lng}`);
-    await updateGristCoordinates('routeStart', pos.lat, pos.lng); // tableId будет получен внутри updateGristCoordinates
+    await updateGristCoordinates('routeStart', pos.lat, pos.lng); 
 }
 
 async function handleMapClick(e) {
@@ -301,7 +301,7 @@ async function handleMapClick(e) {
 
     if (!currentRecordId) { alert("Сначала выберите строку в Grist."); return; }
 
-    const tableId = await getEnsuredTableId(); // Получаем tableId здесь
+    const tableId = await getEnsuredTableId(); 
     if (!tableId) {
         alert("Ошибка: Таблица для обновления не определена. Невозможно установить Старт маршрута. Проверьте конфигурацию виджета или попробуйте выбрать запись снова.");
         console.error("ОШИБКА: handleMapClick - Table ID не определен после getEnsuredTableId. Обновление невозможно.");
@@ -315,7 +315,7 @@ async function handleMapClick(e) {
     const routeStartLabel = `Старт маршрута (ID: ${currentRecordId})`;
     console.log(`DEBUG: Клик для установки "Старт маршрута" (зеленый): ${lat}, ${lng}. Обновление X,Y.`);
     routeStartMarker = updateOrCreateMarker(routeStartMarker, clickPosition, routeStartLabel, greenIcon, true, onRouteStartMarkerDragEnd);
-    await updateGristCoordinates('routeStart', lat, lng); // tableId будет получен внутри updateGristCoordinates
+    await updateGristCoordinates('routeStart', lat, lng); 
 }
 
 function checkApis() {
