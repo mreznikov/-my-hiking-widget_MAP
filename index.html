@@ -2,16 +2,23 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Grist OSM/Leaflet + Google Services</title>
-
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    <title>Grist Israel Hiking Map POI Widget</title> <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
           crossorigin=""/>
 
     <style>
         /* Стили для карты */
-        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
-        #map { height: 100%; width: 100%; background-color: #eee; }
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+            background-color: #eee; /* Фон на случай медленной загрузки тайлов */
+        }
     </style>
 </head>
 <body>
@@ -27,7 +34,5 @@
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC-NbhYb2Dh4wRcJnVADh3KU7IINUa6pB8">
     </script>
 
-    <script defer src="grist_map_widget.js"></script>
-
-</body>
+    <script defer src="grist_map_widget_hiking_poi.js"></script> </body>
 </html>
