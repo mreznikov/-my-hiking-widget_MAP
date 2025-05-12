@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.21) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.24) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -191,7 +191,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
     
-    // ИЗМЕНЕНИЕ: Используем ваш точный формат для ссылки
+    // Используем ваш точный формат для ссылки и переменные lat, lng
     const googleMapsLink = `${GOOGLE_MAPS_BASE_URL_FOR_PLACE}${lat},${lng}`; 
     console.log(`DEBUG: Сгенерирована ссылка Google Maps: ${googleMapsLink}`);
 
@@ -409,6 +409,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.22): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.21): Запуск checkApis."); // Обновляем версию в логе
 checkApis();
 // === КОНЕЦ СКРИПТА ===
