@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.16) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.17) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -189,7 +189,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
     
     // ИЗМЕНЕНИЕ: URL для открытия Google Maps с указанием точки назначения (Места Встречи) через параметр q
-    const googleMapsSearchUrl = `https://developers.google.com/maps/documentation/javascript/libraries${lat},${lng}`; 
+    const googleMapsSearchUrl = `https://www.google.com/maps/place/32%C2%B059'53.7%22N+35%C2%B048'39.3%22E/@32.99825,35.8109167,960m/data=!3m2!1e3!4b1!4m4!3m3!8m2!3d32.99825!4d35.8109167?entry=ttu&g_ep=EgoyMDI1MDUwNy4wIKXMDSoASAFQAw%3D%3D{lat},${lng}`; 
     console.log(`DEBUG: Сгенерирована ссылка Google Maps (поиск точки): ${googleMapsSearchUrl}`);
 
     const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`;
