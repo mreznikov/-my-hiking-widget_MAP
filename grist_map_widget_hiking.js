@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.26) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.25.1 - отладка spoo.me) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -15,7 +15,6 @@ const MARKER_ZOOM_LEVEL = 15;
 let meetingPointJustUpdatedByAction = false; 
 let lastProcessedRecordIdForMeetingPoint = null; 
 
-// Базовый URL для Google Карт, как вы указали (формат https://www.google.com/maps/place/LAT,LNG)
 const GOOGLE_MAPS_BASE_URL_FOR_PLACE = 'https://www.google.com/maps/place/';
 
 // === ИКОНКИ МАРКЕРОВ ===
@@ -34,7 +33,8 @@ const blueIcon = L.icon({ ...commonIconOptions, iconUrl: blueIconUrl });
 const greenIcon = L.icon({ ...commonIconOptions, iconUrl: greenIconUrl });
 const purpleIcon = L.icon({ ...commonIconOptions, iconUrl: purpleIconUrl });
 
-// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (translateText, getTravelTime) ===
+// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+
 async function translateText(text, targetLang, apiKey) {
     if (!text || typeof text !== 'string' || !text.trim()) { return ''; }
     const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
@@ -70,6 +70,50 @@ async function getTravelTime(originLatLng, destinationLatLng, departureTime) {
     console.log(`DEBUG: getTravelTime result: ${travelTimeResult}`);
     return travelTimeResult;
 }
+
+async function shortenUrlWithSpooMe(longUrl) {
+    if (!longUrl) return longUrl; 
+
+    const apiUrl = 'https://spoo.me/api/'; 
+    const data = new URLSearchParams();
+    data.append('url', longUrl);
+
+    console.log(`DEBUG: Попытка сократить URL: ${longUrl} через Spoo.me`);
+
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json'
+            },
+            body: data.toString() 
+        });
+
+        console.log(`DEBUG: Spoo.me API response status: ${response.status}`); 
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`DEBUG: Ошибка API Spoo.me: ${response.status}. Ответ: ${errorText}`);
+            throw new Error(`Spoo.me API error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log("DEBUG: Spoo.me API JSON result:", result); 
+
+        if (result && result.short_url) {
+            console.log(`DEBUG: Spoo.me - короткая ссылка: ${result.short_url}`);
+            return result.short_url;
+        } else {
+            console.warn("Spoo.me не вернул short_url в ответе:", result);
+            return longUrl; 
+        }
+    } catch (error) {
+        console.error("ОШИБКА при сокращении URL через Spoo.me:", error);
+        return longUrl; 
+    }
+}
+
 
 // === ОСНОВНЫЕ ФУНКЦИИ ===
 function initMap() {
@@ -191,9 +235,12 @@ async function processMeetingPointData(lat, lng, tableId) {
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
     
-    // Используем ваш точный формат для ссылки и переменные lat, lng
-    const googleMapsLink = `${GOOGLE_MAPS_BASE_URL_FOR_PLACE}${lat},${lng}`; 
-    console.log(`DEBUG: Сгенерирована ссылка Google Maps: ${googleMapsLink}`);
+    const googleMapsLongUrl = `${GOOGLE_MAPS_BASE_URL_FOR_PLACE}${lat},${lng}`; 
+    console.log(`DEBUG: Сгенерирована длинная ссылка Google Maps: ${googleMapsLongUrl}`);
+
+    const finalGoogleMapsLink = await shortenUrlWithSpooMe(googleMapsLongUrl); 
+    console.log(`DEBUG: Финальная ссылка для Grist (GoogleDrive) после shortenUrlWithSpooMe: ${finalGoogleMapsLink}`);
+
 
     const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`;
     try {
@@ -223,7 +270,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     const updData = { 
         D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, 
         I: ttTA, J: ttJer, K: ttHai, L: ttBS,
-        "GoogleDrive": googleMapsLink 
+        "GoogleDrive": finalGoogleMapsLink 
     };
     Object.keys(updData).forEach(k => (updData[k] === undefined || updData[k] === null || updData[k] === '') && delete updData[k]);
     try {
@@ -259,7 +306,6 @@ async function handleGristRecordUpdate(record, mappings) {
 
     const tableId = await getEnsuredTableId(); 
 
-    // Маркер "Старт маршрута" (зеленый, из X,Y)
     if (typeof record.X === 'number' && typeof record.Y === 'number') {
         const label = record.HikeStartLabel || `Старт маршрута (ID: ${record.id || 'N/A'})`;
         routeStartMarker = updateOrCreateMarker(routeStartMarker, { lat: record.X, lng: record.Y }, label, greenIcon, true, onRouteStartMarkerDragEnd);
@@ -267,7 +313,6 @@ async function handleGristRecordUpdate(record, mappings) {
         console.log("DEBUG: Координаты для 'Старта маршрута' (X,Y) отсутствуют.");
     }
 
-    // Маркер "Место встречи" (синий, из B,C)
     if (typeof record.B === 'number' && typeof record.C === 'number') {
         const label = record.A || `Место встречи (ID: ${record.id || 'N/A'})`;
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: record.B, lng: record.C }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
@@ -293,7 +338,6 @@ async function handleGristRecordUpdate(record, mappings) {
     }
     meetingPointJustUpdatedByAction = false; 
 
-    // Маркер "Конец маршрута" (пурпурный, из Z,AA)
     if (typeof record.Z === 'number' && typeof record.AA === 'number') {
         const label = record.EndRouteLabel || `Конец маршрута (ID: ${record.id || 'N/A'})`;
         endRouteMarker = updateOrCreateMarker(endRouteMarker, { lat: record.Z, lng: record.AA }, label, purpleIcon, true, onEndRouteMarkerDragEnd);
@@ -409,6 +453,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.24): Запуск checkApis."); // Обновляем версию в логе
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.25.1): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
