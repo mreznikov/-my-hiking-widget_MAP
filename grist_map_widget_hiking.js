@@ -20,8 +20,8 @@ let meetingPointJustUpdatedByAction = false;    // Флаг, указывающ�
 // Убедитесь, что эти файлы находятся в той же директории, что и ваш HTML/JS на GitHub,
 // или укажите правильный относительный путь (например, 'icons/Parking-32.png')
 const blueIconUrl = 'Parking-32.png';    // PNG для Места Встречи
-const greenIconUrl = 'trekking-32.png';  // PNG для Старта Маршрута
-const purpleIconUrl = 'Finish-Flag-32.png'; // PNG для Конца Маршрута
+const greenIconUrl = 'hikking.png';  // PNG для Старта Маршрута
+const purpleIconUrl = 'finish-line.png'; // PNG для Конца Маршрута
 
 const commonIconOptions = {
     iconSize: [32, 32],
