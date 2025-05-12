@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.3 - PNG Иконки) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.4) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -6,27 +6,26 @@ let meetingPointMarker = null; // Синий - Место встречи (из B
 let routeStartMarker = null;   // Зеленый - Старт маршрута (из X,Y)
 let endRouteMarker = null;     // Пурпурный - Конец маршрута (из Z,AA)
 
-let currentRecordId = null; 
+let currentRecordId = null;
 let currentTableId = null;
-const HARDCODED_TABLE_ID = "Table1";
+const HARDCODED_TABLE_ID = "Table1"; // Если Grist не передает tableId, используем это
 const apiKey = 'AIzaSyC-NbhYb2Dh4wRcJnVADh3KU7IINUa6pB8'; // ВАШ API КЛЮЧ!
 const MARKER_ZOOM_LEVEL = 15;
 
 let lastProcessedMeetingLat = null; 
 let lastProcessedMeetingLng = null;
-let meetingPointJustUpdatedByAction = false;
+let meetingPointJustUpdatedByAction = false; // Флаг для управления обработкой Места Встречи
 
 // === ИКОНКИ МАРКЕРОВ (Ссылки на ваши PNG на GitHub) ===
 // Убедитесь, что эти файлы находятся в той же директории, что и ваш HTML/JS на GitHub,
 // или укажите правильный относительный путь (например, 'icons/Parking-32.png')
 const blueIconUrl = 'Parking-32.png';    // PNG для Места Встречи
-const greenIconUrl = 'hiking.png';  // PNG для Старта Маршрута
-const purpleIconUrl = 'finish-line.png'; // PNG для Конца Маршрута
+const greenIconUrl = 'trekking-32.png';  // PNG для Старта Маршрута
+const purpleIconUrl = 'Finish-Flag-32.png'; // PNG для Конца Маршрута
 
 const commonIconOptions = {
     iconSize: [32, 32],    // Размер ваших PNG иконок
     iconAnchor: [16, 32],   // Якорь (обычно низ по центру для маркеров-капелек)
-                            // Подстройте, если ваши иконки другой формы!
     popupAnchor: [0, -32],  // Смещение всплывающего окна
     tooltipAnchor: [16, -24] // Смещение тултипа
 };
@@ -166,7 +165,7 @@ function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDrag
         markerInstance.getTooltip() ? markerInstance.setTooltipContent(label) : markerInstance.bindTooltip(label);
         if (!markerInstance.isTooltipOpen()) markerInstance.openTooltip();
         if (!map.hasLayer(markerInstance)) markerInstance.addTo(map);
-        if (markerInstance.options.icon !== icon) markerInstance.setIcon(icon); // Важно для смены иконки, если она уже была другой
+        if (markerInstance.options.icon !== icon) markerInstance.setIcon(icon);
     }
     if (markerInstance._onDragEndListener) markerInstance.off('dragend', markerInstance._onDragEndListener);
     if (isDraggable && dragEndCallback) {
@@ -264,13 +263,15 @@ async function handleGristRecordUpdate(record, mappings) {
         const label = record.A || `Место встречи (ID: ${record.id || 'N/A'})`;
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: record.B, lng: record.C }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
         
-        if (tableId && (meetingPointJustUpdatedByAction || lastProcessedMeetingLat === null || record.B !== lastProcessedMeetingLat || record.C !== lastProcessedMeetingLng)) {
-            console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, lastLat: ${lastProcessedMeetingLat}, rec.B: ${record.B}`);
+        const meetingDataIsMissing = !record.D || record.D === "Адрес не найден" || record.D === "Ошибка геокода" || !record.I || record.I === 'N/A' || record.I === 'Google: Ошибка';
+
+        if (tableId && (meetingPointJustUpdatedByAction || meetingDataIsMissing)) {
+            console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissing: ${meetingDataIsMissing}`);
             await processMeetingPointData(record.B, record.C, tableId);
         } else if (!tableId) {
             console.warn("ПРЕДУПРЕЖДЕНИЕ: Table ID не установлен, processMeetingPointData не будет вызван для Места Встречи.");
         } else {
-            console.log("DEBUG: Координаты Места Встречи не требуют переобработки. Пропуск processMeetingPointData.");
+            console.log("DEBUG: Данные для Места Встречи уже существуют и не требуют переобработки. Пропуск processMeetingPointData.");
         }
         meetingPointJustUpdatedByAction = false; 
     } else {
@@ -329,8 +330,9 @@ async function onMeetingPointMarkerDragEnd(event) {
     const tableId = await getEnsuredTableId();
     if (!tableId) { alert("Ошибка: Не удалось определить таблицу для обновления Места Встречи."); return; }
     
-    meetingPointJustUpdatedByAction = true; 
+    meetingPointJustUpdatedByAction = true; // Устанавливаем флаг перед обновлением Grist
     await updateGristCoordinates('meetingPoint', pos.lat, pos.lng); 
+    // handleGristRecordUpdate будет вызван после этого и использует флаг для вызова processMeetingPointData
 }
 
 async function onRouteStartMarkerDragEnd(event) {
@@ -344,7 +346,6 @@ async function onEndRouteMarkerDragEnd(event) {
     console.log(`DEBUG: "Конец маршрута" (пурпурный) перетащен: ${pos.lat}, ${pos.lng}`);
     await updateGristCoordinates('endRoute', pos.lat, pos.lng);
 }
-
 
 async function handleMapClick(e) {
     if (!e.latlng) { console.warn("ПРЕДУПРЕЖДЕНИЕ: Клик без координат."); return; }
@@ -402,6 +403,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.3): Запуск checkApis."); // Обновляем версию в логе
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.4): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
