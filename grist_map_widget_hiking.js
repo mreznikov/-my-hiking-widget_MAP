@@ -6,7 +6,7 @@ let meetingPointMarker = null; // Синий - Место встречи (из B
 let routeStartMarker = null;   // Зеленый - Старт маршрута (из X,Y)
 let endRouteMarker = null;     // Пурпурный - Конец маршрута (из Z,AA)
 
-let currentRecordId = null;
+let currentRecordId = null; 
 let currentTableId = null;
 const HARDCODED_TABLE_ID = "Table1";
 const apiKey = 'AIzaSyC-NbhYb2Dh4wRcJnVADh3KU7IINUa6pB8'; // ВАШ API КЛЮЧ!
