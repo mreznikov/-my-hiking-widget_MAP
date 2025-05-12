@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.25) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.25 - отладка spoo.me) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -71,15 +71,10 @@ async function getTravelTime(originLatLng, destinationLatLng, departureTime) {
     return travelTimeResult;
 }
 
-/**
- * Сокращает URL с помощью API spoo.me
- * @param {string} longUrl - Длинный URL для сокращения.
- * @returns {Promise<string>} Промис, разрешающийся сокращенным URL или оригинальным URL в случае ошибки.
- */
 async function shortenUrlWithSpooMe(longUrl) {
-    if (!longUrl) return longUrl; // Не пытаемся сократить пустую ссылку
+    if (!longUrl) return longUrl; 
 
-    const apiUrl = 'https://spoo.me/api/'; // Базовый API endpoint для spoo.me
+    const apiUrl = 'https://spoo.me/api/'; 
     const data = new URLSearchParams();
     data.append('url', longUrl);
 
@@ -92,8 +87,10 @@ async function shortenUrlWithSpooMe(longUrl) {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Accept': 'application/json'
             },
-            body: data.toString() // URLSearchParams нужно преобразовать в строку
+            body: data.toString() 
         });
+
+        console.log(`DEBUG: Spoo.me API response status: ${response.status}`); // Дополнительный лог статуса
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -102,16 +99,18 @@ async function shortenUrlWithSpooMe(longUrl) {
         }
 
         const result = await response.json();
+        console.log("DEBUG: Spoo.me API JSON result:", result); // Дополнительный лог ответа
+
         if (result && result.short_url) {
             console.log(`DEBUG: Spoo.me - короткая ссылка: ${result.short_url}`);
             return result.short_url;
         } else {
             console.warn("Spoo.me не вернул short_url в ответе:", result);
-            return longUrl; // Возвращаем длинную ссылку в случае неудачи
+            return longUrl; 
         }
     } catch (error) {
         console.error("ОШИБКА при сокращении URL через Spoo.me:", error);
-        return longUrl; // Возвращаем длинную ссылку в случае ошибки
+        return longUrl; 
     }
 }
 
@@ -239,8 +238,8 @@ async function processMeetingPointData(lat, lng, tableId) {
     const googleMapsLongUrl = `${GOOGLE_MAPS_BASE_URL_FOR_PLACE}${lat},${lng}`; 
     console.log(`DEBUG: Сгенерирована длинная ссылка Google Maps: ${googleMapsLongUrl}`);
 
-    const finalGoogleMapsLink = await shortenUrlWithSpooMe(googleMapsLongUrl); // Пытаемся сократить
-    console.log(`DEBUG: Финальная ссылка для Grist (GoogleDrive): ${finalGoogleMapsLink}`);
+    const finalGoogleMapsLink = await shortenUrlWithSpooMe(googleMapsLongUrl); 
+    console.log(`DEBUG: Финальная ссылка для Grist (GoogleDrive) после shortenUrlWithSpooMe: ${finalGoogleMapsLink}`);
 
 
     const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`;
