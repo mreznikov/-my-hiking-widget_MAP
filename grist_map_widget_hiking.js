@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.25.1 - отладка spoo.me) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.25.2 - доп. отладка spoo.me) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -72,7 +72,10 @@ async function getTravelTime(originLatLng, destinationLatLng, departureTime) {
 }
 
 async function shortenUrlWithSpooMe(longUrl) {
-    if (!longUrl) return longUrl; 
+    if (!longUrl) {
+        console.log("DEBUG: shortenUrlWithSpooMe - longUrl пустой, возвращаем как есть.");
+        return longUrl; 
+    }
 
     const apiUrl = 'https://spoo.me/api/'; 
     const data = new URLSearchParams();
@@ -238,6 +241,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     const googleMapsLongUrl = `${GOOGLE_MAPS_BASE_URL_FOR_PLACE}${lat},${lng}`; 
     console.log(`DEBUG: Сгенерирована длинная ссылка Google Maps: ${googleMapsLongUrl}`);
 
+    console.log("DEBUG: >>> Вызов shortenUrlWithSpooMe <<<"); // <<<<<< НОВЫЙ ЛОГ
     const finalGoogleMapsLink = await shortenUrlWithSpooMe(googleMapsLongUrl); 
     console.log(`DEBUG: Финальная ссылка для Grist (GoogleDrive) после shortenUrlWithSpooMe: ${finalGoogleMapsLink}`);
 
@@ -453,6 +457,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.25.1): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.25.2): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
