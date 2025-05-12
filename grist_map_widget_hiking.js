@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.17) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.18) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -10,7 +10,7 @@ let currentRecordId = null;
 let currentTableId = null;
 const HARDCODED_TABLE_ID = "Table1";
 const apiKey = 'AIzaSyC-NbhYb2Dh4wRcJnVADh3KU7IINUa6pB8'; // ВАШ API КЛЮЧ!
-const MARKER_ZOOM_LEVEL = 15;
+const MARKER_ZOOM_LEVEL = 15; // Используется для Leaflet, можно использовать и для Google Maps ссылки
 
 let meetingPointJustUpdatedByAction = false; 
 let lastProcessedRecordIdForMeetingPoint = null; 
@@ -188,9 +188,9 @@ async function processMeetingPointData(lat, lng, tableId) {
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
     
-    // ИЗМЕНЕНИЕ: URL для открытия Google Maps с указанием точки назначения (Места Встречи) через параметр q
-    const googleMapsSearchUrl = `https://www.google.com/maps/place/32%C2%B059'53.7%22N+35%C2%B048'39.3%22E/@32.99825,35.8109167,960m/data=!3m2!1e3!4b1!4m4!3m3!8m2!3d32.99825!4d35.8109167?entry=ttu&g_ep=EgoyMDI1MDUwNy4wIKXMDSoASAFQAw%3D%3D{lat},${lng}`; 
-    console.log(`DEBUG: Сгенерирована ссылка Google Maps (поиск точки): ${googleMapsSearchUrl}`);
+    // ИЗМЕНЕНИЕ: URL для открытия Google Maps с центрированием на точке и указанием масштаба
+    const googleMapsViewUrl = `https://www.google.com/maps/dir/?api=1&destination=$&z=${MARKER_ZOOM_LEVEL}`; 
+    console.log(`DEBUG: Сгенерирована ссылка Google Maps (центр и масштаб): ${googleMapsViewUrl}`);
 
     const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`;
     try {
@@ -220,7 +220,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     const updData = { 
         D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, 
         I: ttTA, J: ttJer, K: ttHai, L: ttBS,
-        "GoogleDrive": googleMapsSearchUrl 
+        "GoogleDrive": googleMapsViewUrl 
     };
     Object.keys(updData).forEach(k => (updData[k] === undefined || updData[k] === null || updData[k] === '') && delete updData[k]);
     try {
