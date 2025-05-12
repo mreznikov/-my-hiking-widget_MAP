@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.1 - Иконки с GitHub) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -14,19 +14,26 @@ const MARKER_ZOOM_LEVEL = 15;
 
 let lastProcessedMeetingLat = null; 
 let lastProcessedMeetingLng = null;
-let meetingPointJustUpdatedByAction = false; // Флаг для управления обработкой Места Встречи
+let meetingPointJustUpdatedByAction = false;
 
-// === ИКОНКИ МАРКЕРОВ ===
-const blueIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#0000FF" width="28px" height="28px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>`;
-const greenIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#008000" width="28px" height="28px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>`;
-const purpleIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#800080" width="28px" height="28px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>`;
+// === ИКОНКИ МАРКЕРОВ (Ссылки на ваши SVG на GitHub) ===
+// ЗАМЕНИТЕ ЭТИ URL НА ВАШИ РЕАЛЬНЫЕ ССЫЛКИ НА RAW SVG ФАЙЛЫ НА GITHUB
+const blueIconUrl = 'Parking-32.png';
+const greenIconUrl = 'trekking-32.png';
+const purpleIconUrl = 'Finish-Flag-32.png';
 
-const commonIconOptions = { iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -28], tooltipAnchor: [14, -18] };
-const blueIcon = L.icon({ ...commonIconOptions, iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(blueIconSVG)}` });
-const greenIcon = L.icon({ ...commonIconOptions, iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(greenIconSVG)}` });
-const purpleIcon = L.icon({ ...commonIconOptions, iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(purpleIconSVG)}` });
+const commonIconOptions = {
+    iconSize: [32, 32], // Вы можете настроить размер под ваши SVG
+    iconAnchor: [16, 32], // Настройте якорь в соответствии с вашей иконкой (обычно низ по центру)
+    popupAnchor: [0, -32],
+    tooltipAnchor: [16, -24] 
+};
 
-// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (translateText, getTravelTime) ===
+const blueIcon = L.icon({ ...commonIconOptions, iconUrl: blueIconUrl });
+const greenIcon = L.icon({ ...commonIconOptions, iconUrl: greenIconUrl });
+const purpleIcon = L.icon({ ...commonIconOptions, iconUrl: purpleIconUrl });
+
+// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (translateText, getTravelTime - без изменений из v9.9) ===
 async function translateText(text, targetLang, apiKey) {
     if (!text || typeof text !== 'string' || !text.trim()) { return ''; }
     const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
@@ -63,7 +70,7 @@ async function getTravelTime(originLatLng, destinationLatLng, departureTime) {
     return travelTimeResult;
 }
 
-// === ОСНОВНЫЕ ФУНКЦИИ ===
+// === ОСНОВНЫЕ ФУНКЦИИ (initMap, setupGrist, handleOptionsUpdate, getEnsuredTableId - без изменений из v9.9) ===
 function initMap() {
     console.log("DEBUG: initMap()");
     try {
@@ -146,6 +153,13 @@ async function getEnsuredTableId() {
     return null;
 }
 
+// updateOrCreateMarker, processMeetingPointData, handleGristRecordUpdate, 
+// updateGristCoordinates, onMeetingPointMarkerDragEnd, onRouteStartMarkerDragEnd,
+// onEndRouteMarkerDragEnd, handleMapClick, checkApis
+// ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ ОТНОСИТЕЛЬНО v9.9, так как они уже используют
+// переменные blueIcon, greenIcon, purpleIcon, которые мы переопределили выше.
+// Для краткости я их здесь не повторяю, но они должны быть в вашем полном файле.
+
 function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDraggable, dragEndCallback) {
     const latLng = L.latLng(latLngLiteral.lat, latLngLiteral.lng);
     if (!markerInstance) {
@@ -225,7 +239,7 @@ async function handleGristRecordUpdate(record, mappings) {
         console.log("DEBUG: ID записи изменился, сбрасываем lastProcessedMeetingLat/Lng и meetingPointJustUpdatedByAction.");
         lastProcessedMeetingLat = null;
         lastProcessedMeetingLng = null;
-        meetingPointJustUpdatedByAction = false; // Сбрасываем флаг для новой записи
+        meetingPointJustUpdatedByAction = false; 
     }
     
     if (!map) { console.warn("ПРЕДУПРЕЖДЕНИЕ: Карта не инициализирована."); return; }
@@ -255,7 +269,6 @@ async function handleGristRecordUpdate(record, mappings) {
         const label = record.A || `Место встречи (ID: ${record.id || 'N/A'})`;
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: record.B, lng: record.C }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
         
-        // Проверяем, нужно ли обрабатывать данные для Места Встречи
         if (tableId && (meetingPointJustUpdatedByAction || lastProcessedMeetingLat === null || record.B !== lastProcessedMeetingLat || record.C !== lastProcessedMeetingLng)) {
             console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, lastLat: ${lastProcessedMeetingLat}, rec.B: ${record.B}`);
             await processMeetingPointData(record.B, record.C, tableId);
@@ -264,7 +277,7 @@ async function handleGristRecordUpdate(record, mappings) {
         } else {
             console.log("DEBUG: Координаты Места Встречи не требуют переобработки. Пропуск processMeetingPointData.");
         }
-        meetingPointJustUpdatedByAction = false; // Сбрасываем флаг после проверки/обработки
+        meetingPointJustUpdatedByAction = false; 
     } else {
         console.log("DEBUG: Координаты для 'Места встречи' (B,C) отсутствуют.");
         if (lastProcessedMeetingLat !== null || lastProcessedMeetingLng !== null) {
@@ -272,7 +285,7 @@ async function handleGristRecordUpdate(record, mappings) {
             lastProcessedMeetingLat = null;
             lastProcessedMeetingLng = null;
         }
-        meetingPointJustUpdatedByAction = false; // Также сбрасываем флаг
+        meetingPointJustUpdatedByAction = false; 
     }
 
     if (typeof record.Z === 'number' && typeof record.AA === 'number') {
@@ -321,9 +334,8 @@ async function onMeetingPointMarkerDragEnd(event) {
     const tableId = await getEnsuredTableId();
     if (!tableId) { alert("Ошибка: Не удалось определить таблицу для обновления Места Встречи."); return; }
     
-    meetingPointJustUpdatedByAction = true; // Устанавливаем флаг перед обновлением Grist
+    meetingPointJustUpdatedByAction = true; 
     await updateGristCoordinates('meetingPoint', pos.lat, pos.lng); 
-    // handleGristRecordUpdate будет вызван после этого и использует флаг
 }
 
 async function onRouteStartMarkerDragEnd(event) {
@@ -369,9 +381,8 @@ async function handleMapClick(e) {
         const label = `Место встречи (ID: ${currentRecordId})`;
         console.log(`DEBUG: Клик для установки "Место встречи" (синий): ${lat}, ${lng}.`);
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, clickPosition, label, blueIcon, true, onMeetingPointMarkerDragEnd);
-        meetingPointJustUpdatedByAction = true; // Устанавливаем флаг
+        meetingPointJustUpdatedByAction = true; 
         await updateGristCoordinates('meetingPoint', lat, lng);
-        // processMeetingPointData будет вызван из handleGristRecordUpdate из-за флага
     } else if (!routeStartMarker) {
         const label = `Старт маршрута (ID: ${currentRecordId})`;
         console.log(`DEBUG: Клик для установки "Старт маршрута" (зеленый): ${lat}, ${lng}.`);
@@ -396,6 +407,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.1): Запуск checkApis."); // Обновляем версию в логе
 checkApis();
 // === КОНЕЦ СКРИПТА ===
