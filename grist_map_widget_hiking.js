@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.12) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.13) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -187,7 +187,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
-    // ИЗМЕНЕНИЕ: Формируем URL для построения маршрута ДО точки
+    // ИЗМЕНЕНИЕ: Корректный URL для построения маршрута ДО точки
     const googleMapsDirectionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
     console.log(`DEBUG: Сгенерирована ссылка Google Maps (маршрут до): ${googleMapsDirectionsUrl}`);
 
