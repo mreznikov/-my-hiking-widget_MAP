@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.25.2 - доп. отладка spoo.me) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.25.3 - Spoo.me GET) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -77,20 +77,18 @@ async function shortenUrlWithSpooMe(longUrl) {
         return longUrl; 
     }
 
-    const apiUrl = 'https://spoo.me/api/'; 
-    const data = new URLSearchParams();
-    data.append('url', longUrl);
+    // ИЗМЕНЕНИЕ: Используем GET-запрос согласно документации spoo.me/api
+    const apiUrl = `https://spoo.me/api/?url=${encodeURIComponent(longUrl)}`; 
 
-    console.log(`DEBUG: Попытка сократить URL: ${longUrl} через Spoo.me`);
+    console.log(`DEBUG: Попытка сократить URL: ${longUrl} через Spoo.me (GET-запрос)`);
 
     try {
         const response = await fetch(apiUrl, {
-            method: 'POST',
+            method: 'GET', // Указываем GET, хотя это значение по умолчанию для fetch
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Accept': 'application/json'
-            },
-            body: data.toString() 
+                'Accept': 'application/json' // Ожидаем JSON ответ
+            }
+            // Тело (body) и Content-Type не нужны для GET-запроса
         });
 
         console.log(`DEBUG: Spoo.me API response status: ${response.status}`); 
@@ -241,7 +239,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     const googleMapsLongUrl = `${GOOGLE_MAPS_BASE_URL_FOR_PLACE}${lat},${lng}`; 
     console.log(`DEBUG: Сгенерирована длинная ссылка Google Maps: ${googleMapsLongUrl}`);
 
-    console.log("DEBUG: >>> Вызов shortenUrlWithSpooMe <<<"); // <<<<<< НОВЫЙ ЛОГ
+    console.log("DEBUG: >>> Вызов shortenUrlWithSpooMe <<<");
     const finalGoogleMapsLink = await shortenUrlWithSpooMe(googleMapsLongUrl); 
     console.log(`DEBUG: Финальная ссылка для Grist (GoogleDrive) после shortenUrlWithSpooMe: ${finalGoogleMapsLink}`);
 
