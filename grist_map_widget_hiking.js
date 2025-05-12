@@ -191,7 +191,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
     
-    // ИСПРАВЛЕНИЕ: Используем переменные lat и lng для формирования URL
+    // ИЗМЕНЕНИЕ: Используем ваш точный формат для ссылки
     const googleMapsLink = `${GOOGLE_MAPS_BASE_URL_FOR_PLACE}${lat},${lng}`; 
     console.log(`DEBUG: Сгенерирована ссылка Google Maps: ${googleMapsLink}`);
 
@@ -409,6 +409,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.21): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.22): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
