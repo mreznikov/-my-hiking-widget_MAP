@@ -10,7 +10,7 @@ let currentRecordId = null;
 let currentTableId = null;
 const HARDCODED_TABLE_ID = "Table1";
 const apiKey = 'AIzaSyC-NbhYb2Dh4wRcJnVADh3KU7IINUa6pB8'; // ВАШ API КЛЮЧ!
-const MARKER_ZOOM_LEVEL = 15; // Используется для Leaflet, можно использовать и для Google Maps ссылки
+const MARKER_ZOOM_LEVEL = 15;
 
 let meetingPointJustUpdatedByAction = false; 
 let lastProcessedRecordIdForMeetingPoint = null; 
@@ -406,6 +406,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.15): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.16): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
