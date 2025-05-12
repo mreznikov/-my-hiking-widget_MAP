@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.20) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.21) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -14,9 +14,6 @@ const MARKER_ZOOM_LEVEL = 15;
 
 let meetingPointJustUpdatedByAction = false; 
 let lastProcessedRecordIdForMeetingPoint = null; 
-
-// Базовый URL для Google Карт, как вы указали
-const GOOGLE_MAPS_BASE_URL_FOR_PLACE = 'https://www.google.com/maps/place/';
 
 // === ИКОНКИ МАРКЕРОВ ===
 const blueIconUrl = 'Parking-32.png';
@@ -192,7 +189,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
     
     // ИЗМЕНЕНИЕ: Используем ваш точный формат для ссылки
-    const googleMapsLink = `${GOOGLE_MAPS_BASE_URL_FOR_PLACE}${lat},${lng}`; 
+    const googleMapsLink = `https://www.google.com/maps/dir/?api=1&destination=$5${lat},${lng}`; 
     console.log(`DEBUG: Сгенерирована ссылка Google Maps: ${googleMapsLink}`);
 
     const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`;
