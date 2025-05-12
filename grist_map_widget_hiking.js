@@ -409,6 +409,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.21): Запуск checkApis."); // Обновляем версию в логе
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.21): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
