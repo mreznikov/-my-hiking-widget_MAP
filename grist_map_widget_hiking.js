@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.13) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.14) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -187,9 +187,9 @@ async function processMeetingPointData(lat, lng, tableId) {
     
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
-    // ИЗМЕНЕНИЕ: Корректный URL для построения маршрута ДО точки
-    const googleMapsDirectionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-    console.log(`DEBUG: Сгенерирована ссылка Google Maps (маршрут до): ${googleMapsDirectionsUrl}`);
+    // ИЗМЕНЕНИЕ: URL для открытия Google Maps с указанием точки назначения (Места Встречи)
+    const googleMapsPointUrl = `https://www.google.com/maps/dir/?api=1&destination=LAT,LNG{lat},${lng}`;
+    console.log(`DEBUG: Сгенерирована ссылка Google Maps (точка): ${googleMapsPointUrl}`);
 
     const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`;
     try {
@@ -219,7 +219,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     const updData = { 
         D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, 
         I: ttTA, J: ttJer, K: ttHai, L: ttBS,
-        "GoogleDrive": googleMapsDirectionsUrl 
+        "GoogleDrive": googleMapsPointUrl // Используем обновленную ссылку
     };
     Object.keys(updData).forEach(k => (updData[k] === undefined || updData[k] === null || updData[k] === '') && delete updData[k]);
     try {
@@ -405,6 +405,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.12): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.13): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
