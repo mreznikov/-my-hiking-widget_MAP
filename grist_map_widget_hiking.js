@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.8) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -12,8 +12,9 @@ const HARDCODED_TABLE_ID = "Table1";
 const apiKey = 'AIzaSyC-NbhYb2Dh4wRcJnVADh3KU7IINUa6pB8'; // ВАШ API КЛЮЧ!
 const MARKER_ZOOM_LEVEL = 15;
 
-let lastProcessedMeetingLat = null; // Для отслеживания последних обработанных координат Места Встречи
+let lastProcessedMeetingLat = null; 
 let lastProcessedMeetingLng = null;
+let meetingPointJustUpdatedByAction = false; // Флаг для управления обработкой Места Встречи
 
 // === ИКОНКИ МАРКЕРОВ ===
 const blueIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#0000FF" width="28px" height="28px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>`;
@@ -175,7 +176,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     }
     
     console.log(`DEBUG: processMeetingPointData для Места Встречи: ${lat}, ${lng} (Table: ${tableId})`);
-    lastProcessedMeetingLat = lat; // Обновляем перед началом обработки
+    lastProcessedMeetingLat = lat; 
     lastProcessedMeetingLng = lng;
 
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
@@ -216,9 +217,17 @@ async function processMeetingPointData(lat, lng, tableId) {
 
 async function handleGristRecordUpdate(record, mappings) {
     console.log("DEBUG: Grist record update:", record);
+    const previousRecordId = currentRecordId;
     currentRecordId = record?.id || null;
     console.log("DEBUG: Current Record ID:", currentRecordId);
 
+    if (previousRecordId !== currentRecordId) {
+        console.log("DEBUG: ID записи изменился, сбрасываем lastProcessedMeetingLat/Lng и meetingPointJustUpdatedByAction.");
+        lastProcessedMeetingLat = null;
+        lastProcessedMeetingLng = null;
+        meetingPointJustUpdatedByAction = false; // Сбрасываем флаг для новой записи
+    }
+    
     if (!map) { console.warn("ПРЕДУПРЕЖДЕНИЕ: Карта не инициализирована."); return; }
 
     if (meetingPointMarker) { meetingPointMarker.remove(); meetingPointMarker = null; }
@@ -227,8 +236,9 @@ async function handleGristRecordUpdate(record, mappings) {
 
     if (!record) {
         console.log("DEBUG: Запись Grist не выбрана. Сбрасываем lastProcessedMeetingLat/Lng.");
-        lastProcessedMeetingLat = null; // Сбрасываем при отмене выбора записи
+        lastProcessedMeetingLat = null;
         lastProcessedMeetingLng = null;
+        meetingPointJustUpdatedByAction = false;
         return;
     }
 
@@ -246,23 +256,23 @@ async function handleGristRecordUpdate(record, mappings) {
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: record.B, lng: record.C }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
         
         // Проверяем, нужно ли обрабатывать данные для Места Встречи
-        if (tableId && (record.B !== lastProcessedMeetingLat || record.C !== lastProcessedMeetingLng || lastProcessedMeetingLat === null)) {
-            console.log("DEBUG: Координаты Места Встречи изменились или обрабатываются впервые. Запуск processMeetingPointData.");
+        if (tableId && (meetingPointJustUpdatedByAction || lastProcessedMeetingLat === null || record.B !== lastProcessedMeetingLat || record.C !== lastProcessedMeetingLng)) {
+            console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, lastLat: ${lastProcessedMeetingLat}, rec.B: ${record.B}`);
             await processMeetingPointData(record.B, record.C, tableId);
-            // lastProcessedMeetingLat/Lng будут обновлены внутри processMeetingPointData
         } else if (!tableId) {
             console.warn("ПРЕДУПРЕЖДЕНИЕ: Table ID не установлен, processMeetingPointData не будет вызван для Места Встречи.");
         } else {
-            console.log("DEBUG: Координаты Места Встречи не изменились с последней обработки. Пропуск processMeetingPointData.");
+            console.log("DEBUG: Координаты Места Встречи не требуют переобработки. Пропуск processMeetingPointData.");
         }
+        meetingPointJustUpdatedByAction = false; // Сбрасываем флаг после проверки/обработки
     } else {
         console.log("DEBUG: Координаты для 'Места встречи' (B,C) отсутствуют.");
-        // Если координаты B,C удалены, сбрасываем lastProcessed, чтобы при следующем появлении они обработались
         if (lastProcessedMeetingLat !== null || lastProcessedMeetingLng !== null) {
             console.log("DEBUG: Координаты Места Встречи удалены, сбрасываем lastProcessedMeetingLat/Lng.");
             lastProcessedMeetingLat = null;
             lastProcessedMeetingLng = null;
         }
+        meetingPointJustUpdatedByAction = false; // Также сбрасываем флаг
     }
 
     if (typeof record.Z === 'number' && typeof record.AA === 'number') {
@@ -285,7 +295,7 @@ async function updateGristCoordinates(markerType, lat, lng) {
         if (!tableId) {
              alert("Ошибка: Таблица для обновления не определена (updateGristCoordinates).");
         }
-        return false; // Возвращаем false при неудаче
+        return false;
     }
 
     let updateData = {};
@@ -301,7 +311,7 @@ async function updateGristCoordinates(markerType, lat, lng) {
     try {
         await grist.docApi.applyUserActions([['UpdateRecord', tableId, currentRecordId, updateData]]);
         console.log(`DEBUG: Координаты Grist для "${markerType}" обновлены:`, updateData);
-        return true; // Возвращаем true при успехе
+        return true; 
     } catch (e) { console.error(`ОШИБКА обновления Grist (${markerType} coords):`, e); return false;}
 }
 
@@ -311,14 +321,9 @@ async function onMeetingPointMarkerDragEnd(event) {
     const tableId = await getEnsuredTableId();
     if (!tableId) { alert("Ошибка: Не удалось определить таблицу для обновления Места Встречи."); return; }
     
-    const updated = await updateGristCoordinates('meetingPoint', pos.lat, pos.lng); 
-    // Grist onRecord вызовет handleGristRecordUpdate, который проверит lastProcessed и вызовет processMeetingPointData
-    // Поэтому прямой вызов processMeetingPointData здесь больше не нужен, если мы полагаемся на onRecord.
-    // Однако, если мы хотим немедленной реакции без ожидания onRecord (хотя он должен быть быстрым):
-    if (updated && (pos.lat !== lastProcessedMeetingLat || pos.lng !== lastProcessedMeetingLng)) {
-         console.log("DEBUG: onMeetingPointMarkerDragEnd - координаты изменились, вызываем processMeetingPointData.");
-         await processMeetingPointData(pos.lat, pos.lng, tableId);
-    }
+    meetingPointJustUpdatedByAction = true; // Устанавливаем флаг перед обновлением Grist
+    await updateGristCoordinates('meetingPoint', pos.lat, pos.lng); 
+    // handleGristRecordUpdate будет вызван после этого и использует флаг
 }
 
 async function onRouteStartMarkerDragEnd(event) {
@@ -364,13 +369,9 @@ async function handleMapClick(e) {
         const label = `Место встречи (ID: ${currentRecordId})`;
         console.log(`DEBUG: Клик для установки "Место встречи" (синий): ${lat}, ${lng}.`);
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, clickPosition, label, blueIcon, true, onMeetingPointMarkerDragEnd);
-        const updated = await updateGristCoordinates('meetingPoint', lat, lng);
-        // Grist onRecord вызовет handleGristRecordUpdate, который проверит lastProcessed и вызовет processMeetingPointData
-        // Для немедленной реакции, если нужно:
-        if (updated) {
-            console.log("DEBUG: handleMapClick (meetingPoint) - координаты изменились, вызываем processMeetingPointData.");
-            await processMeetingPointData(lat, lng, tableId);
-        }
+        meetingPointJustUpdatedByAction = true; // Устанавливаем флаг
+        await updateGristCoordinates('meetingPoint', lat, lng);
+        // processMeetingPointData будет вызван из handleGristRecordUpdate из-за флага
     } else if (!routeStartMarker) {
         const label = `Старт маршрута (ID: ${currentRecordId})`;
         console.log(`DEBUG: Клик для установки "Старт маршрута" (зеленый): ${lat}, ${lng}.`);
@@ -395,6 +396,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.8): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
