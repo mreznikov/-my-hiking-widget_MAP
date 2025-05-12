@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.1 - Иконки с GitHub) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.3 - PNG Иконки) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -16,24 +16,25 @@ let lastProcessedMeetingLat = null;
 let lastProcessedMeetingLng = null;
 let meetingPointJustUpdatedByAction = false;
 
-// === ИКОНКИ МАРКЕРОВ (Ссылки на ваши SVG на GitHub) ===
-// ЗАМЕНИТЕ ЭТИ URL НА ВАШИ РЕАЛЬНЫЕ ССЫЛКИ НА RAW SVG ФАЙЛЫ НА GITHUB
-const blueIconUrl = 'Parking-32.png';
-const greenIconUrl = 'trekking-32.png';
-const purpleIconUrl = 'Finish-Flag-32.png';
+// === ИКОНКИ МАРКЕРОВ (Ссылки на ваши PNG на GitHub) ===
+// Убедитесь, что эти файлы находятся в той же директории, что и ваш HTML/JS на GitHub,
+// или укажите правильный относительный путь (например, 'icons/Parking-32.png')
+const blueIconUrl = 'Parking-32.png';    // PNG для Места Встречи
+const greenIconUrl = 'trekking-32.png';  // PNG для Старта Маршрута
+const purpleIconUrl = 'Finish-Flag-32.png'; // PNG для Конца Маршрута
 
 const commonIconOptions = {
-    iconSize: [32, 32], // Вы можете настроить размер под ваши SVG
-    iconAnchor: [16, 32], // Настройте якорь в соответствии с вашей иконкой (обычно низ по центру)
-    popupAnchor: [0, -32],
-    tooltipAnchor: [16, -24] 
+    iconSize: [32, 32],    // Размер ваших PNG иконок
+    iconAnchor: [16, 32],   // Якорь (обычно низ по центру для маркеров-капелек)
+    popupAnchor: [0, -32],  // Смещение всплывающего окна
+    tooltipAnchor: [16, -24] // Смещение тултипа
 };
 
 const blueIcon = L.icon({ ...commonIconOptions, iconUrl: blueIconUrl });
 const greenIcon = L.icon({ ...commonIconOptions, iconUrl: greenIconUrl });
 const purpleIcon = L.icon({ ...commonIconOptions, iconUrl: purpleIconUrl });
 
-// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (translateText, getTravelTime - без изменений из v9.9) ===
+// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (translateText, getTravelTime) ===
 async function translateText(text, targetLang, apiKey) {
     if (!text || typeof text !== 'string' || !text.trim()) { return ''; }
     const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
@@ -70,7 +71,7 @@ async function getTravelTime(originLatLng, destinationLatLng, departureTime) {
     return travelTimeResult;
 }
 
-// === ОСНОВНЫЕ ФУНКЦИИ (initMap, setupGrist, handleOptionsUpdate, getEnsuredTableId - без изменений из v9.9) ===
+// === ОСНОВНЫЕ ФУНКЦИИ ===
 function initMap() {
     console.log("DEBUG: initMap()");
     try {
@@ -152,13 +153,6 @@ async function getEnsuredTableId() {
     console.error("ОШИБКА КРИТИЧЕСКАЯ: getEnsuredTableId - не удалось определить Table ID никаким способом.");
     return null;
 }
-
-// updateOrCreateMarker, processMeetingPointData, handleGristRecordUpdate, 
-// updateGristCoordinates, onMeetingPointMarkerDragEnd, onRouteStartMarkerDragEnd,
-// onEndRouteMarkerDragEnd, handleMapClick, checkApis
-// ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ ОТНОСИТЕЛЬНО v9.9, так как они уже используют
-// переменные blueIcon, greenIcon, purpleIcon, которые мы переопределили выше.
-// Для краткости я их здесь не повторяю, но они должны быть в вашем полном файле.
 
 function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDraggable, dragEndCallback) {
     const latLng = L.latLng(latLngLiteral.lat, latLngLiteral.lng);
@@ -336,6 +330,7 @@ async function onMeetingPointMarkerDragEnd(event) {
     
     meetingPointJustUpdatedByAction = true; 
     await updateGristCoordinates('meetingPoint', pos.lat, pos.lng); 
+    // handleGristRecordUpdate будет вызван после этого и использует флаг для вызова processMeetingPointData
 }
 
 async function onRouteStartMarkerDragEnd(event) {
@@ -407,6 +402,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.1): Запуск checkApis."); // Обновляем версию в логе
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.2): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
