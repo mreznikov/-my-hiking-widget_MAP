@@ -26,6 +26,7 @@ const purpleIconUrl = 'Finish-Flag-32.png'; // PNG для Конца Маршр�
 const commonIconOptions = {
     iconSize: [32, 32],    // Размер ваших PNG иконок
     iconAnchor: [16, 32],   // Якорь (обычно низ по центру для маркеров-капелек)
+                            // Подстройте, если ваши иконки другой формы!
     popupAnchor: [0, -32],  // Смещение всплывающего окна
     tooltipAnchor: [16, -24] // Смещение тултипа
 };
@@ -165,14 +166,14 @@ function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDrag
         markerInstance.getTooltip() ? markerInstance.setTooltipContent(label) : markerInstance.bindTooltip(label);
         if (!markerInstance.isTooltipOpen()) markerInstance.openTooltip();
         if (!map.hasLayer(markerInstance)) markerInstance.addTo(map);
-        if (markerInstance.options.icon !== icon) markerInstance.setIcon(icon);
+        if (markerInstance.options.icon !== icon) markerInstance.setIcon(icon); // Важно для смены иконки, если она уже была другой
     }
     if (markerInstance._onDragEndListener) markerInstance.off('dragend', markerInstance._onDragEndListener);
     if (isDraggable && dragEndCallback) {
         markerInstance.on('dragend', dragEndCallback);
         markerInstance._onDragEndListener = dragEndCallback;
     }
-    console.log(`DEBUG: Маркер "${label}" ${markerInstance._leaflet_id ? 'обновлен' : 'создан'}.`);
+    console.log(`DEBUG: Маркер "${label}" ${markerInstance._leaflet_id ? 'обновлен' : 'создан'}. Иконка:`, icon.options.iconUrl);
     return markerInstance;
 }
 
@@ -330,7 +331,6 @@ async function onMeetingPointMarkerDragEnd(event) {
     
     meetingPointJustUpdatedByAction = true; 
     await updateGristCoordinates('meetingPoint', pos.lat, pos.lng); 
-    // handleGristRecordUpdate будет вызван после этого и использует флаг для вызова processMeetingPointData
 }
 
 async function onRouteStartMarkerDragEnd(event) {
@@ -402,6 +402,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.2): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.3): Запуск checkApis."); // Обновляем версию в логе
 checkApis();
 // === КОНЕЦ СКРИПТА ===
