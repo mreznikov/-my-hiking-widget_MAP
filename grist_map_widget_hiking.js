@@ -219,7 +219,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     const updData = { 
         D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, 
         I: ttTA, J: ttJer, K: ttHai, L: ttBS,
-        "GoogleDrive": googleMapsPointUrl // Используем обновленную ссылку
+        "GoogleDrive": googleMapsPointUrl 
     };
     Object.keys(updData).forEach(k => (updData[k] === undefined || updData[k] === null || updData[k] === '') && delete updData[k]);
     try {
@@ -405,6 +405,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.13): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.14): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
