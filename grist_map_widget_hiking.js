@@ -265,10 +265,9 @@ async function handleGristRecordUpdate(record, mappings) {
         const label = record.A || `Место встречи (ID: ${record.id || 'N/A'})`;
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: record.B, lng: record.C }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
         
-        // Используем фактический ID колонки "GoogleDrive"
         const meetingDataIsMissingOrEmpty = !record.D || record.D.trim() === '' || record.D === "Адрес не найден" || record.D === "Ошибка геокода" || 
                                            !record.I || record.I.trim() === '' || record.I === 'N/A' || record.I.includes("Ошибка") ||
-                                           !record["GoogleDrive"]; 
+                                           !record["GoogleDrive"]; // Используем фактический ID колонки
 
         if (tableId && (meetingPointJustUpdatedByAction || (previousRecordId !== currentRecordId && meetingDataIsMissingOrEmpty) )) {
             console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissingOrEmpty: ${meetingDataIsMissingOrEmpty}, PrevRecId: ${previousRecordId}, CurrRecId: ${currentRecordId}`);
@@ -399,6 +398,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.10): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.11): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
