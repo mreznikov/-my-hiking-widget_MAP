@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.18) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.17) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -10,7 +10,7 @@ let currentRecordId = null;
 let currentTableId = null;
 const HARDCODED_TABLE_ID = "Table1";
 const apiKey = 'AIzaSyC-NbhYb2Dh4wRcJnVADh3KU7IINUa6pB8'; // ВАШ API КЛЮЧ!
-const MARKER_ZOOM_LEVEL = 15; // Используется для Leaflet, можно использовать и для Google Maps ссылки
+const MARKER_ZOOM_LEVEL = 15; 
 
 let meetingPointJustUpdatedByAction = false; 
 let lastProcessedRecordIdForMeetingPoint = null; 
@@ -188,9 +188,10 @@ async function processMeetingPointData(lat, lng, tableId) {
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
     
-    // ИЗМЕНЕНИЕ: URL для открытия Google Maps с центрированием на точке и указанием масштаба
-    const googleMapsViewUrl = `https://www.google.com/maps/dir/?api=1&destination=$&z=${MARKER_ZOOM_LEVEL}`; 
-    console.log(`DEBUG: Сгенерирована ссылка Google Maps (центр и масштаб): ${googleMapsViewUrl}`);
+    // ИЗМЕНЕНИЕ: URL для открытия Google Maps с указанием точки назначения (Места Встречи) через параметр q
+    // Используем фактические переменные lat и lng
+    const googleMapsSearchUrl = `https://developers.google.com/maps/documentation/javascript/libraries$${lat},${lng}`; 
+    console.log(`DEBUG: Сгенерирована ссылка Google Maps (поиск точки): ${googleMapsSearchUrl}`);
 
     const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`;
     try {
@@ -220,7 +221,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     const updData = { 
         D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, 
         I: ttTA, J: ttJer, K: ttHai, L: ttBS,
-        "GoogleDrive": googleMapsViewUrl 
+        "GoogleDrive": googleMapsSearchUrl 
     };
     Object.keys(updData).forEach(k => (updData[k] === undefined || updData[k] === null || updData[k] === '') && delete updData[k]);
     try {
@@ -406,6 +407,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.16): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.17): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
