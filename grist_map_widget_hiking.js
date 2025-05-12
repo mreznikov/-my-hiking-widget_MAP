@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.8) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.9) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -14,6 +14,7 @@ const MARKER_ZOOM_LEVEL = 15;
 
 // Флаг для управления обработкой Места Встречи
 let meetingPointJustUpdatedByAction = false; 
+let lastProcessedRecordIdForMeetingPoint = null; 
 
 // === ИКОНКИ МАРКЕРОВ ===
 const blueIconUrl = 'Parking-32.png';
@@ -88,10 +89,12 @@ function setupGrist() {
             { name: "X", type: 'Numeric', optional: true, title: 'Старт маршрута Широта' },
             { name: "Y", type: 'Numeric', optional: true, title: 'Старт маршрута Долгота' },
             { name: "HikeStartLabel", type: 'Text', optional: true, title: 'Название Старта маршрута' },
+            
             { name: "A", type: 'Text', optional: true, title: 'Название Места встречи' },
             { name: "B", type: 'Numeric', title: 'Место встречи Широта' },
             { name: "C", type: 'Numeric', title: 'Место встречи Долгота' },
-            { name: "AB", type: 'Text', optional: true, title: 'Место встреч. GoogleDrive' },
+            { name: "AB", type: 'Text', optional: true, title: 'Место встреч. GoogleDrive' }, // <<< НОВАЯ КОЛОНКА
+            
             { name: "D", type: 'Text', optional: true, title: 'Адрес Места встречи: Город' },
             { name: "E", type: 'Text', optional: true, title: 'Адрес Места встречи: Район' },
             { name: "F", type: 'Text', optional: true, title: 'Адрес Места встречи: Округ' },
@@ -100,6 +103,7 @@ function setupGrist() {
             { name: "J", type: 'Text', optional: true, title: 'К Месту встречи: Время из Иерус.' },
             { name: "K", type: 'Text', optional: true, title: 'К Месту встречи: Время из Хайфы' },
             { name: "L", type: 'Text', optional: true, title: 'К Месту встречи: Время из Б-Ш' },
+            
             { name: "Z", type: 'Numeric', optional: true, title: 'Конец маршрута Широта' },
             { name: "AA", type: 'Numeric', optional: true, title: 'Конец маршрута Долгота' },
             { name: "EndRouteLabel", type: 'Text', optional: true, title: 'Название Конца маршрута' },
@@ -184,7 +188,9 @@ async function processMeetingPointData(lat, lng, tableId) {
     
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
-    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+    // Формируем URL для Google Карт для построения маршрута до точки (Места Встречи)
+    const googleMapsDirectionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+    console.log(`DEBUG: Сгенерирована ссылка Google Maps: ${googleMapsDirectionsUrl}`);
 
     const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`;
     try {
@@ -214,7 +220,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     const updData = { 
         D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, 
         I: ttTA, J: ttJer, K: ttHai, L: ttBS,
-        AB: googleMapsUrl 
+        AB: googleMapsDirectionsUrl // <<< ДОБАВЛЕНИЕ ССЫЛКИ В ДАННЫЕ ДЛЯ GRIST
     };
     Object.keys(updData).forEach(k => (updData[k] === undefined || updData[k] === null || updData[k] === '') && delete updData[k]);
     try {
@@ -230,8 +236,10 @@ async function handleGristRecordUpdate(record, mappings) {
     console.log("DEBUG: Current Record ID:", currentRecordId);
 
     if (previousRecordId !== currentRecordId) {
-        console.log("DEBUG: ID записи изменился, сбрасываем meetingPointJustUpdatedByAction.");
+        console.log("DEBUG: ID записи изменился, сбрасываем meetingPointJustUpdatedByAction и lastProcessedRecordIdForMeetingPoint.");
         meetingPointJustUpdatedByAction = false; 
+        // lastProcessedRecordIdForMeetingPoint больше не используется для этого условия,
+        // но сброс флага важен.
     }
     
     if (!map) { console.warn("ПРЕДУПРЕЖДЕНИЕ: Карта не инициализирована."); return; }
@@ -261,9 +269,9 @@ async function handleGristRecordUpdate(record, mappings) {
         const label = record.A || `Место встречи (ID: ${record.id || 'N/A'})`;
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: record.B, lng: record.C }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
         
-        // Проверяем, нужно ли обрабатывать данные для Места Встречи
         const meetingDataIsMissingOrEmpty = !record.D || record.D.trim() === '' || record.D === "Адрес не найден" || record.D === "Ошибка геокода" || 
-                                           !record.I || record.I.trim() === '' || record.I === 'N/A' || record.I.includes("Ошибка");
+                                           !record.I || record.I.trim() === '' || record.I === 'N/A' || record.I.includes("Ошибка") ||
+                                           !record.AB; // <<< ПРОВЕРЯЕМ НОВОЕ ПОЛЕ СО ССЫЛКОЙ
 
         if (tableId && (meetingPointJustUpdatedByAction || (previousRecordId !== currentRecordId && meetingDataIsMissingOrEmpty) )) {
             console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissingOrEmpty: ${meetingDataIsMissingOrEmpty}, PrevRecId: ${previousRecordId}, CurrRecId: ${currentRecordId}`);
@@ -324,7 +332,7 @@ async function onMeetingPointMarkerDragEnd(event) {
     console.log(`DEBUG: "Место встречи" (синий) перетащено: ${pos.lat}, ${pos.lng}`);
     meetingPointJustUpdatedByAction = true; // Устанавливаем флаг
     await updateGristCoordinates('meetingPoint', pos.lat, pos.lng); 
-    // Grist onRecord вызовет handleGristRecordUpdate, который проверит флаг и вызовет processMeetingPointData
+    // handleGristRecordUpdate будет вызван после этого и использует флаг для вызова processMeetingPointData
 }
 
 async function onRouteStartMarkerDragEnd(event) {
@@ -395,6 +403,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.6): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.7): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
