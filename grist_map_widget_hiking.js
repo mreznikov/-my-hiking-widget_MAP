@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.10) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.11) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -92,8 +92,7 @@ function setupGrist() {
             { name: "A", type: 'Text', optional: true, title: 'Название Места встречи' },
             { name: "B", type: 'Numeric', title: 'Место встречи Широта' },
             { name: "C", type: 'Numeric', title: 'Место встречи Долгота' },
-            // ИЗМЕНИТЕ "ВАШ_РЕАЛЬНЫЙ_ID_КОЛОНКИ_AB" НА НАСТОЯЩИЙ ID КОЛОНКИ ИЗ GRIST
-            { name: "ВАШ_РЕАЛЬНЫЙ_ID_КОЛОНКИ_AB", type: 'Text', optional: true, title: 'Место встреч. GoogleDrive' }, 
+            { name: "GoogleDrive", type: 'Text', optional: true, title: 'Место встреч. GoogleDrive' }, 
             
             { name: "D", type: 'Text', optional: true, title: 'Адрес Места встречи: Город' },
             { name: "E", type: 'Text', optional: true, title: 'Адрес Места встречи: Район' },
@@ -219,8 +218,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     const updData = { 
         D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, 
         I: ttTA, J: ttJer, K: ttHai, L: ttBS,
-        // ИЗМЕНИТЕ "ВАШ_РЕАЛЬНЫЙ_ID_КОЛОНКИ_AB" НА НАСТОЯЩИЙ ID КОЛОНКИ ИЗ GRIST
-        "ВАШ_РЕАЛЬНЫЙ_ID_КОЛОНКИ_AB": googleMapsDirectionsUrl 
+        "GoogleDrive": googleMapsDirectionsUrl // Используем фактический ID колонки
     };
     Object.keys(updData).forEach(k => (updData[k] === undefined || updData[k] === null || updData[k] === '') && delete updData[k]);
     try {
@@ -267,10 +265,10 @@ async function handleGristRecordUpdate(record, mappings) {
         const label = record.A || `Место встречи (ID: ${record.id || 'N/A'})`;
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: record.B, lng: record.C }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
         
-        // ИЗМЕНИТЕ "ВАШ_РЕАЛЬНЫЙ_ID_КОЛОНКИ_AB" НА НАСТОЯЩИЙ ID КОЛОНКИ ИЗ GRIST
+        // Используем фактический ID колонки "GoogleDrive"
         const meetingDataIsMissingOrEmpty = !record.D || record.D.trim() === '' || record.D === "Адрес не найден" || record.D === "Ошибка геокода" || 
                                            !record.I || record.I.trim() === '' || record.I === 'N/A' || record.I.includes("Ошибка") ||
-                                           !record["ВАШ_РЕАЛЬНЫЙ_ID_КОЛОНКИ_AB"]; 
+                                           !record["GoogleDrive"]; 
 
         if (tableId && (meetingPointJustUpdatedByAction || (previousRecordId !== currentRecordId && meetingDataIsMissingOrEmpty) )) {
             console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissingOrEmpty: ${meetingDataIsMissingOrEmpty}, PrevRecId: ${previousRecordId}, CurrRecId: ${currentRecordId}`);
@@ -401,6 +399,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.10): Запуск checkApis."); // Обновляем версию в логе
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.10): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
