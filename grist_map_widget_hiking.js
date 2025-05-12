@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.11) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.12) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -187,8 +187,9 @@ async function processMeetingPointData(lat, lng, tableId) {
     
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
+    // ИЗМЕНЕНИЕ: Формируем URL для построения маршрута ДО точки
     const googleMapsDirectionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-    console.log(`DEBUG: Сгенерирована ссылка Google Maps: ${googleMapsDirectionsUrl}`);
+    console.log(`DEBUG: Сгенерирована ссылка Google Maps (маршрут до): ${googleMapsDirectionsUrl}`);
 
     const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`;
     try {
@@ -218,7 +219,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     const updData = { 
         D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, 
         I: ttTA, J: ttJer, K: ttHai, L: ttBS,
-        "GoogleDrive": googleMapsDirectionsUrl // Используем фактический ID колонки
+        "GoogleDrive": googleMapsDirectionsUrl 
     };
     Object.keys(updData).forEach(k => (updData[k] === undefined || updData[k] === null || updData[k] === '') && delete updData[k]);
     try {
@@ -234,8 +235,9 @@ async function handleGristRecordUpdate(record, mappings) {
     console.log("DEBUG: Current Record ID:", currentRecordId);
 
     if (previousRecordId !== currentRecordId) {
-        console.log("DEBUG: ID записи изменился, сбрасываем meetingPointJustUpdatedByAction.");
+        console.log("DEBUG: ID записи изменился, сбрасываем meetingPointJustUpdatedByAction и lastProcessedRecordIdForMeetingPoint.");
         meetingPointJustUpdatedByAction = false; 
+        lastProcessedRecordIdForMeetingPoint = null; 
     }
     
     if (!map) { console.warn("ПРЕДУПРЕЖДЕНИЕ: Карта не инициализирована."); return; }
@@ -247,6 +249,7 @@ async function handleGristRecordUpdate(record, mappings) {
     if (!record) {
         console.log("DEBUG: Запись Grist не выбрана.");
         meetingPointJustUpdatedByAction = false;
+        lastProcessedRecordIdForMeetingPoint = null;
         return;
     }
 
@@ -267,11 +270,12 @@ async function handleGristRecordUpdate(record, mappings) {
         
         const meetingDataIsMissingOrEmpty = !record.D || record.D.trim() === '' || record.D === "Адрес не найден" || record.D === "Ошибка геокода" || 
                                            !record.I || record.I.trim() === '' || record.I === 'N/A' || record.I.includes("Ошибка") ||
-                                           !record["GoogleDrive"]; // Используем фактический ID колонки
+                                           !record["GoogleDrive"]; 
 
-        if (tableId && (meetingPointJustUpdatedByAction || (previousRecordId !== currentRecordId && meetingDataIsMissingOrEmpty) )) {
-            console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissingOrEmpty: ${meetingDataIsMissingOrEmpty}, PrevRecId: ${previousRecordId}, CurrRecId: ${currentRecordId}`);
+        if (tableId && (meetingPointJustUpdatedByAction || (lastProcessedRecordIdForMeetingPoint !== currentRecordId && meetingDataIsMissingOrEmpty) )) {
+            console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissingOrEmpty: ${meetingDataIsMissingOrEmpty}, lastProcessedRecId: ${lastProcessedRecordIdForMeetingPoint}, currentRecId: ${currentRecordId}`);
             await processMeetingPointData(record.B, record.C, tableId);
+            lastProcessedRecordIdForMeetingPoint = currentRecordId; 
         } else if (!tableId) {
             console.warn("ПРЕДУПРЕЖДЕНИЕ: Table ID не установлен, processMeetingPointData не будет вызван для Места Встречи.");
         } else {
@@ -279,6 +283,9 @@ async function handleGristRecordUpdate(record, mappings) {
         }
     } else {
         console.log("DEBUG: Координаты для 'Места встречи' (B,C) отсутствуют.");
+        if (lastProcessedRecordIdForMeetingPoint === currentRecordId) { 
+             lastProcessedRecordIdForMeetingPoint = null;
+        }
     }
     meetingPointJustUpdatedByAction = false; 
 
@@ -398,6 +405,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.11): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.12): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
