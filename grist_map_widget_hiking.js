@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.5) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.6) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -12,16 +12,13 @@ const HARDCODED_TABLE_ID = "Table1";
 const apiKey = 'AIzaSyC-NbhYb2Dh4wRcJnVADh3KU7IINUa6pB8'; // ВАШ API КЛЮЧ!
 const MARKER_ZOOM_LEVEL = 15;
 
-// Переменные для отслеживания состояния обработки "Места встречи"
-let lastProcessedRecordIdForMeetingPoint = null; // ID записи, для которой последний раз обрабатывалось место встречи
-let meetingPointJustUpdatedByAction = false;    // Флаг, указывающий на прямое действие пользователя с синим маркером
+// Флаг для управления обработкой Места Встречи
+let meetingPointJustUpdatedByAction = false; 
 
-// === ИКОНКИ МАРКЕРОВ (Ссылки на ваши PNG на GitHub) ===
-// Убедитесь, что эти файлы находятся в той же директории, что и ваш HTML/JS на GitHub,
-// или укажите правильный относительный путь (например, 'icons/Parking-32.png')
-const blueIconUrl = 'Parking-32.png';    // PNG для Места Встречи
-const greenIconUrl = 'hikkng.png';  // PNG для Старта Маршрута 
-const purpleIconUrl = 'finish-line.png'; // PNG для Конца Маршрута
+// === ИКОНКИ МАРКЕРОВ ===
+const blueIconUrl = 'Parking-32.png';
+const greenIconUrl = 'trekking-32.png'; // Убедитесь, что имя файла верное (было hikkng.png)
+const purpleIconUrl = 'Finish-Flag-32.png';
 
 const commonIconOptions = {
     iconSize: [32, 32],
@@ -124,7 +121,6 @@ function handleOptionsUpdate(options, interaction) {
 
 async function getEnsuredTableId() {
     if (currentTableId) {
-        // console.log(`DEBUG: getEnsuredTableId - используем кэшированный currentTableId: ${currentTableId}`);
         return currentTableId;
     }
     console.log("DEBUG: getEnsuredTableId - currentTableId is null, пытаемся получить через grist.selectedTable.getTableId()");
@@ -185,10 +181,6 @@ async function processMeetingPointData(lat, lng, tableId) {
     
     console.log(`DEBUG: processMeetingPointData для Места Встречи: ${lat}, ${lng} (Table: ${tableId})`);
     
-    // Обновляем lastProcessed только после успешного начала обработки для этих координат
-    lastProcessedMeetingLat = lat; 
-    lastProcessedMeetingLng = lng;
-
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
 
@@ -232,9 +224,7 @@ async function handleGristRecordUpdate(record, mappings) {
     console.log("DEBUG: Current Record ID:", currentRecordId);
 
     if (previousRecordId !== currentRecordId) {
-        console.log("DEBUG: ID записи изменился, сбрасываем lastProcessedMeetingLat/Lng и meetingPointJustUpdatedByAction.");
-        lastProcessedMeetingLat = null;
-        lastProcessedMeetingLng = null;
+        console.log("DEBUG: ID записи изменился, сбрасываем meetingPointJustUpdatedByAction.");
         meetingPointJustUpdatedByAction = false; 
     }
     
@@ -245,9 +235,7 @@ async function handleGristRecordUpdate(record, mappings) {
     if (endRouteMarker) { endRouteMarker.remove(); endRouteMarker = null; }
 
     if (!record) {
-        console.log("DEBUG: Запись Grist не выбрана. Сбрасываем lastProcessedMeetingLat/Lng.");
-        lastProcessedMeetingLat = null;
-        lastProcessedMeetingLng = null;
+        console.log("DEBUG: Запись Grist не выбрана.");
         meetingPointJustUpdatedByAction = false;
         return;
     }
@@ -268,25 +256,21 @@ async function handleGristRecordUpdate(record, mappings) {
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: record.B, lng: record.C }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
         
         // Проверяем, нужно ли обрабатывать данные для Места Встречи
-        const meetingDataIsMissing = !record.D || record.D === "Адрес не найден" || record.D === "Ошибка геокода" || !record.I || record.I === 'N/A' || record.I === 'Google: Ошибка';
+        // Данные считаются отсутствующими, если нет города (D) ИЛИ нет времени в пути (I)
+        const meetingDataIsMissing = !record.D || !record.I || record.D.includes("Адрес не найден") || record.D.includes("Ошибка геокода") || record.I.includes("N/A") || record.I.includes("Ошибка");
 
-        if (tableId && (meetingPointJustUpdatedByAction || (lastProcessedRecordIdForMeetingPoint !== currentRecordId && meetingDataIsMissing) )) {
-            console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissing: ${meetingDataIsMissing}, lastProcessedRecId: ${lastProcessedRecordIdForMeetingPoint}, currentRecId: ${currentRecordId}`);
+        if (tableId && (meetingPointJustUpdatedByAction || (previousRecordId !== currentRecordId && meetingDataIsMissing) )) {
+            console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissing: ${meetingDataIsMissing}, PrevRecId: ${previousRecordId}, CurrRecId: ${currentRecordId}`);
             await processMeetingPointData(record.B, record.C, tableId);
-            lastProcessedRecordIdForMeetingPoint = currentRecordId; // Запоминаем, что для этой записи данные обработаны
         } else if (!tableId) {
             console.warn("ПРЕДУПРЕЖДЕНИЕ: Table ID не установлен, processMeetingPointData не будет вызван для Места Встречи.");
         } else {
             console.log("DEBUG: Данные для Места Встречи уже существуют или не требуют немедленной переобработки. Пропуск processMeetingPointData.");
         }
-        meetingPointJustUpdatedByAction = false; // Сбрасываем флаг после проверки/обработки
     } else {
         console.log("DEBUG: Координаты для 'Места встречи' (B,C) отсутствуют.");
-        if (lastProcessedRecordIdForMeetingPoint === currentRecordId) { // Сбрасываем, только если обрабатывали эту запись
-             lastProcessedRecordIdForMeetingPoint = null;
-        }
-        meetingPointJustUpdatedByAction = false; 
     }
+    meetingPointJustUpdatedByAction = false; // Сбрасываем флаг после всех проверок и возможной обработки
 
     // Маркер "Конец маршрута" (пурпурный, из Z,AA)
     if (typeof record.Z === 'number' && typeof record.AA === 'number') {
@@ -408,6 +392,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.5): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.5): Запуск checkApis."); // Убедитесь, что это v9.9.5
 checkApis();
 // === КОНЕЦ СКРИПТА ===
