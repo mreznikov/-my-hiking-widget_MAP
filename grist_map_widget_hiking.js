@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.26) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.27) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -95,7 +95,7 @@ function setupGrist() {
             { name: "B", type: 'Numeric', title: 'Место встречи Широта' },
             { name: "C", type: 'Numeric', title: 'Место встречи Долгота' },
             { name: "GoogleDrive", type: 'Text', optional: true, title: 'Место встреч. GoogleDrive' }, 
-            { name: "WazeLink", type: 'Text', optional: true, title: 'Место встреч. Waze' }, // <<< НОВАЯ КОЛОНКА
+            { name: "Waze", type: 'Text', optional: true, title: 'Место встреч. Waze' }, // ИЗМЕНЕНО: name на "Waze"
             
             { name: "D", type: 'Text', optional: true, title: 'Адрес Места встречи: Город' },
             { name: "E", type: 'Text', optional: true, title: 'Адрес Места встречи: Район' },
@@ -194,7 +194,6 @@ async function processMeetingPointData(lat, lng, tableId) {
     const googleMapsLink = `${GOOGLE_MAPS_BASE_URL_FOR_PLACE}${lat},${lng}`; 
     console.log(`DEBUG: Сгенерирована ссылка Google Maps: ${googleMapsLink}`);
 
-    // Генерируем ссылку для Waze
     const wazeLink = `https://www.waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
     console.log(`DEBUG: Сгенерирована ссылка Waze: ${wazeLink}`);
 
@@ -228,7 +227,7 @@ async function processMeetingPointData(lat, lng, tableId) {
         D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, 
         I: ttTA, J: ttJer, K: ttHai, L: ttBS,
         "GoogleDrive": googleMapsLink,
-        "WazeLink": wazeLink // <<< ДОБАВЛЕНИЕ ССЫЛКИ WAZE
+        "Waze": wazeLink // ИЗМЕНЕНО: ключ на "Waze"
     };
     Object.keys(updData).forEach(k => (updData[k] === undefined || updData[k] === null || updData[k] === '') && delete updData[k]);
     try {
@@ -277,9 +276,10 @@ async function handleGristRecordUpdate(record, mappings) {
         const label = record.A || `Место встречи (ID: ${record.id || 'N/A'})`;
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: record.B, lng: record.C }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
         
+        // ИЗМЕНЕНО: Проверяем поле с ID "Waze"
         const meetingDataIsMissingOrEmpty = !record.D || record.D.trim() === '' || record.D === "Адрес не найден" || record.D === "Ошибка геокода" || 
                                            !record.I || record.I.trim() === '' || record.I === 'N/A' || record.I.includes("Ошибка") ||
-                                           !record["GoogleDrive"] || !record["WazeLink"]; // <<< ПРОВЕРКА НОВОЙ КОЛОНКИ WAZE
+                                           !record["GoogleDrive"] || !record["Waze"]; 
 
         if (tableId && (meetingPointJustUpdatedByAction || (lastProcessedRecordIdForMeetingPoint !== currentRecordId && meetingDataIsMissingOrEmpty) )) {
             console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissingOrEmpty: ${meetingDataIsMissingOrEmpty}, lastProcessedRecId: ${lastProcessedRecordIdForMeetingPoint}, currentRecId: ${currentRecordId}`);
@@ -414,6 +414,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.26): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.27): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
