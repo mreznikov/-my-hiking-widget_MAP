@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.25.3 - Spoo.me GET) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.26) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -33,8 +33,7 @@ const blueIcon = L.icon({ ...commonIconOptions, iconUrl: blueIconUrl });
 const greenIcon = L.icon({ ...commonIconOptions, iconUrl: greenIconUrl });
 const purpleIcon = L.icon({ ...commonIconOptions, iconUrl: purpleIconUrl });
 
-// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
-
+// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (translateText, getTravelTime) ===
 async function translateText(text, targetLang, apiKey) {
     if (!text || typeof text !== 'string' || !text.trim()) { return ''; }
     const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
@@ -71,51 +70,6 @@ async function getTravelTime(originLatLng, destinationLatLng, departureTime) {
     return travelTimeResult;
 }
 
-async function shortenUrlWithSpooMe(longUrl) {
-    if (!longUrl) {
-        console.log("DEBUG: shortenUrlWithSpooMe - longUrl пустой, возвращаем как есть.");
-        return longUrl; 
-    }
-
-    // ИЗМЕНЕНИЕ: Используем GET-запрос согласно документации spoo.me/api
-    const apiUrl = `https://spoo.me/api/?url=${encodeURIComponent(longUrl)}`; 
-
-    console.log(`DEBUG: Попытка сократить URL: ${longUrl} через Spoo.me (GET-запрос)`);
-
-    try {
-        const response = await fetch(apiUrl, {
-            method: 'GET', // Указываем GET, хотя это значение по умолчанию для fetch
-            headers: {
-                'Accept': 'application/json' // Ожидаем JSON ответ
-            }
-            // Тело (body) и Content-Type не нужны для GET-запроса
-        });
-
-        console.log(`DEBUG: Spoo.me API response status: ${response.status}`); 
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`DEBUG: Ошибка API Spoo.me: ${response.status}. Ответ: ${errorText}`);
-            throw new Error(`Spoo.me API error: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log("DEBUG: Spoo.me API JSON result:", result); 
-
-        if (result && result.short_url) {
-            console.log(`DEBUG: Spoo.me - короткая ссылка: ${result.short_url}`);
-            return result.short_url;
-        } else {
-            console.warn("Spoo.me не вернул short_url в ответе:", result);
-            return longUrl; 
-        }
-    } catch (error) {
-        console.error("ОШИБКА при сокращении URL через Spoo.me:", error);
-        return longUrl; 
-    }
-}
-
-
 // === ОСНОВНЫЕ ФУНКЦИИ ===
 function initMap() {
     console.log("DEBUG: initMap()");
@@ -141,6 +95,7 @@ function setupGrist() {
             { name: "B", type: 'Numeric', title: 'Место встречи Широта' },
             { name: "C", type: 'Numeric', title: 'Место встречи Долгота' },
             { name: "GoogleDrive", type: 'Text', optional: true, title: 'Место встреч. GoogleDrive' }, 
+            { name: "WazeLink", type: 'Text', optional: true, title: 'Место встреч. Waze' }, // <<< НОВАЯ КОЛОНКА
             
             { name: "D", type: 'Text', optional: true, title: 'Адрес Места встречи: Город' },
             { name: "E", type: 'Text', optional: true, title: 'Адрес Места встречи: Район' },
@@ -236,12 +191,12 @@ async function processMeetingPointData(lat, lng, tableId) {
     let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
     let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
     
-    const googleMapsLongUrl = `${GOOGLE_MAPS_BASE_URL_FOR_PLACE}${lat},${lng}`; 
-    console.log(`DEBUG: Сгенерирована длинная ссылка Google Maps: ${googleMapsLongUrl}`);
+    const googleMapsLink = `${GOOGLE_MAPS_BASE_URL_FOR_PLACE}${lat},${lng}`; 
+    console.log(`DEBUG: Сгенерирована ссылка Google Maps: ${googleMapsLink}`);
 
-    console.log("DEBUG: >>> Вызов shortenUrlWithSpooMe <<<");
-    const finalGoogleMapsLink = await shortenUrlWithSpooMe(googleMapsLongUrl); 
-    console.log(`DEBUG: Финальная ссылка для Grist (GoogleDrive) после shortenUrlWithSpooMe: ${finalGoogleMapsLink}`);
+    // Генерируем ссылку для Waze
+    const wazeLink = `https://www.waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
+    console.log(`DEBUG: Сгенерирована ссылка Waze: ${wazeLink}`);
 
 
     const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`;
@@ -272,12 +227,13 @@ async function processMeetingPointData(lat, lng, tableId) {
     const updData = { 
         D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, 
         I: ttTA, J: ttJer, K: ttHai, L: ttBS,
-        "GoogleDrive": finalGoogleMapsLink 
+        "GoogleDrive": googleMapsLink,
+        "WazeLink": wazeLink // <<< ДОБАВЛЕНИЕ ССЫЛКИ WAZE
     };
     Object.keys(updData).forEach(k => (updData[k] === undefined || updData[k] === null || updData[k] === '') && delete updData[k]);
     try {
         await grist.docApi.applyUserActions([['UpdateRecord', tableId, currentRecordId, updData]]);
-        console.log("DEBUG: Данные адреса/времени/ссылки для Места встречи обновлены в Grist.");
+        console.log("DEBUG: Данные адреса/времени/ссылок для Места встречи обновлены в Grist.");
     } catch (e) { console.error("ОШИБКА обновления Grist (Meeting Point Data):", e); }
 }
 
@@ -308,6 +264,7 @@ async function handleGristRecordUpdate(record, mappings) {
 
     const tableId = await getEnsuredTableId(); 
 
+    // Маркер "Старт маршрута" (зеленый, из X,Y)
     if (typeof record.X === 'number' && typeof record.Y === 'number') {
         const label = record.HikeStartLabel || `Старт маршрута (ID: ${record.id || 'N/A'})`;
         routeStartMarker = updateOrCreateMarker(routeStartMarker, { lat: record.X, lng: record.Y }, label, greenIcon, true, onRouteStartMarkerDragEnd);
@@ -315,13 +272,14 @@ async function handleGristRecordUpdate(record, mappings) {
         console.log("DEBUG: Координаты для 'Старта маршрута' (X,Y) отсутствуют.");
     }
 
+    // Маркер "Место встречи" (синий, из B,C)
     if (typeof record.B === 'number' && typeof record.C === 'number') {
         const label = record.A || `Место встречи (ID: ${record.id || 'N/A'})`;
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: record.B, lng: record.C }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
         
         const meetingDataIsMissingOrEmpty = !record.D || record.D.trim() === '' || record.D === "Адрес не найден" || record.D === "Ошибка геокода" || 
                                            !record.I || record.I.trim() === '' || record.I === 'N/A' || record.I.includes("Ошибка") ||
-                                           !record["GoogleDrive"]; 
+                                           !record["GoogleDrive"] || !record["WazeLink"]; // <<< ПРОВЕРКА НОВОЙ КОЛОНКИ WAZE
 
         if (tableId && (meetingPointJustUpdatedByAction || (lastProcessedRecordIdForMeetingPoint !== currentRecordId && meetingDataIsMissingOrEmpty) )) {
             console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissingOrEmpty: ${meetingDataIsMissingOrEmpty}, lastProcessedRecId: ${lastProcessedRecordIdForMeetingPoint}, currentRecId: ${currentRecordId}`);
@@ -340,6 +298,7 @@ async function handleGristRecordUpdate(record, mappings) {
     }
     meetingPointJustUpdatedByAction = false; 
 
+    // Маркер "Конец маршрута" (пурпурный, из Z,AA)
     if (typeof record.Z === 'number' && typeof record.AA === 'number') {
         const label = record.EndRouteLabel || `Конец маршрута (ID: ${record.id || 'N/A'})`;
         endRouteMarker = updateOrCreateMarker(endRouteMarker, { lat: record.Z, lng: record.AA }, label, purpleIcon, true, onEndRouteMarkerDragEnd);
@@ -455,6 +414,6 @@ function checkApis() {
     else setTimeout(checkApis, 250);
 }
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.25.2): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.26): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
