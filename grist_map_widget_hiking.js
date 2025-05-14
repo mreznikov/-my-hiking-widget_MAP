@@ -1,419 +1,350 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.27) ===
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Grist Weather Fetcher</title>
+    <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 10px; background-color: #f0f0f0; }
+        #status { margin-top: 10px; padding: 8px; background-color: #fff; border-radius: 4px; min-height: 40px; white-space: pre-wrap; }
+        .processing { color: blue; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h3>Получение погоды для походов</h3>
+    <p>Выберите строку в Table1, чтобы получить температуру и прогноз для связанных дат и времени из Table2.</p>
+    <div id="status">Ожидание выбора записи в Table1...</div>
 
-// === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
-let map;
-let meetingPointMarker = null; // Синий - Место встречи (из B,C)
-let routeStartMarker = null;   // Зеленый - Старт маршрута (из X,Y)
-let endRouteMarker = null;     // Пурпурный - Конец маршрута (из Z,AA)
-
-let currentRecordId = null;
-let currentTableId = null;
-const HARDCODED_TABLE_ID = "Table1";
-const apiKey = 'AIzaSyC-NbhYb2Dh4wRcJnVADh3KU7IINUa6pB8'; // ВАШ API КЛЮЧ!
-const MARKER_ZOOM_LEVEL = 15; 
-
-let meetingPointJustUpdatedByAction = false; 
-let lastProcessedRecordIdForMeetingPoint = null; 
-
-const GOOGLE_MAPS_BASE_URL_FOR_PLACE = 'https://www.google.com/maps/place/';
-
-// === ИКОНКИ МАРКЕРОВ ===
-const blueIconUrl = 'Parking-32.png';
-const greenIconUrl = 'trekking-32.png'; 
-const purpleIconUrl = 'Finish-Flag-32.png';
-
-const commonIconOptions = {
-    iconSize: [32, 32],
-    iconAnchor: [16, 32], 
-    popupAnchor: [0, -32],
-    tooltipAnchor: [16, -24] 
-};
-
-const blueIcon = L.icon({ ...commonIconOptions, iconUrl: blueIconUrl });
-const greenIcon = L.icon({ ...commonIconOptions, iconUrl: greenIconUrl });
-const purpleIcon = L.icon({ ...commonIconOptions, iconUrl: purpleIconUrl });
-
-// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (translateText, getTravelTime) ===
-async function translateText(text, targetLang, apiKey) {
-    if (!text || typeof text !== 'string' || !text.trim()) { return ''; }
-    const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
-    console.log(`DEBUG: translateText: "${text}" to ${targetLang}`);
-    try {
-        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ q: text, target: targetLang }) });
-        const b = await r.text(); console.log(`DEBUG: translateText status for "${text}": ${r.status}`);
-        if (!r.ok) { throw new Error(`Translation API error ${r.status}`); }
-        const d = JSON.parse(b);
-        if (d?.data?.translations?.[0]?.translatedText) {
-            const t = d.data.translations[0].translatedText; console.log(`DEBUG: translateText success: "${text}" -> "${t}"`);
-            const e = document.createElement('textarea'); e.innerHTML = t; return e.value;
-        } else { console.warn(`DEBUG: translateText no translation for "${text}"`); return text; }
-    } catch (e) { console.error(`DEBUG: translateText fail for "${text}":`, e); return text; }
-}
-
-async function getTravelTime(originLatLng, destinationLatLng, departureTime) {
-    let travelTimeResult = 'N/A';
-    console.log(`DEBUG: getTravelTime from ${JSON.stringify(originLatLng)} to ${JSON.stringify(destinationLatLng)} at ${departureTime.toISOString()}`);
-    try {
-        if (typeof google === 'undefined' || !google?.maps?.DirectionsService) { throw new Error("Google Directions Service not loaded."); }
-        const service = new google.maps.DirectionsService();
-        const request = { origin: originLatLng, destination: destinationLatLng, travelMode: google.maps.TravelMode.DRIVING, drivingOptions: { departureTime: departureTime, trafficModel: google.maps.TrafficModel.BEST_GUESS } };
-        const result = await new Promise((resolve, reject) => service.route(request, (res, stat) => stat === google.maps.DirectionsStatus.OK ? resolve(res) : reject(new Error(`Directions status: ${stat}.`))));
-        if (result.routes?.[0]?.legs?.[0]) {
-            const leg = result.routes[0].legs[0];
-            travelTimeResult = leg.duration_in_traffic?.text || leg.duration?.text || 'Время не найдено';
-            if (result.routes[0].warnings?.some(w => typeof w === 'string' && ['border', 'границ', 'checkpoint', 'crossing', 'territories', 'territory', 'таможн'].some(k => w.toLowerCase().includes(k.toLowerCase())))) {
-                travelTimeResult += " (ПРЕДУПРЕЖДЕНИЕ О ГРАНИЦЕ!)";
-            }
-        } else { travelTimeResult = `Google: ${result.status || 'Маршрут не найден'}`; }
-    } catch (e) { travelTimeResult = `Google: Ошибка (${e.message || 'Неизвестно'})`; }
-    console.log(`DEBUG: getTravelTime result: ${travelTimeResult}`);
-    return travelTimeResult;
-}
-
-// === ОСНОВНЫЕ ФУНКЦИИ ===
-function initMap() {
-    console.log("DEBUG: initMap()");
-    try {
-        map = L.map('map').setView([31.771959, 35.217018], 8);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: 'OSM' }).addTo(map);
-        map.on('click', handleMapClick);
-        setupGrist();
-    } catch (e) { console.error("ОШИБКА initMap:", e); }
-}
-
-function setupGrist() {
-    if (typeof grist === 'undefined' || !grist.ready) { console.error("ОШИБКА: Grist API не готов."); return; }
-    console.log("DEBUG: setupGrist()");
-    grist.ready({
-        requiredAccess: 'full',
-        columns: [
-            { name: "X", type: 'Numeric', optional: true, title: 'Старт маршрута Широта' },
-            { name: "Y", type: 'Numeric', optional: true, title: 'Старт маршрута Долгота' },
-            { name: "HikeStartLabel", type: 'Text', optional: true, title: 'Название Старта маршрута' },
-            
-            { name: "A", type: 'Text', optional: true, title: 'Название Места встречи' },
-            { name: "B", type: 'Numeric', title: 'Место встречи Широта' },
-            { name: "C", type: 'Numeric', title: 'Место встречи Долгота' },
-            { name: "GoogleDrive", type: 'Text', optional: true, title: 'Место встреч. GoogleDrive' }, 
-            { name: "Waze", type: 'Text', optional: true, title: 'Место встреч. Waze' }, // ИЗМЕНЕНО: name на "Waze"
-            
-            { name: "D", type: 'Text', optional: true, title: 'Адрес Места встречи: Город' },
-            { name: "E", type: 'Text', optional: true, title: 'Адрес Места встречи: Район' },
-            { name: "F", type: 'Text', optional: true, title: 'Адрес Места встречи: Округ' },
-            { name: "H_Meeting", type: 'Text', optional: true, title: 'Адрес Места встречи: Микрорайон' },
-            { name: "I", type: 'Text', optional: true, title: 'К Месту встречи: Время из Т-А' },
-            { name: "J", type: 'Text', optional: true, title: 'К Месту встречи: Время из Иерус.' },
-            { name: "K", type: 'Text', optional: true, title: 'К Месту встречи: Время из Хайфы' },
-            { name: "L", type: 'Text', optional: true, title: 'К Месту встречи: Время из Б-Ш' },
-            
-            { name: "Z", type: 'Numeric', optional: true, title: 'Конец маршрута Широта' },
-            { name: "AA", type: 'Numeric', optional: true, title: 'Конец маршрута Долгота' },
-            { name: "EndRouteLabel", type: 'Text', optional: true, title: 'Название Конца маршрута' },
-        ]
-    });
-    grist.onOptions(handleOptionsUpdate);
-    grist.onRecord(handleGristRecordUpdate);
-    console.log("DEBUG: Grist API готов.");
-}
-
-function handleOptionsUpdate(options, interaction) {
-    console.log("DEBUG: Grist options:", options, "Interaction:", interaction);
-    currentTableId = (options?.tableId) || (interaction?.tableId) || null;
-    if (currentTableId) {
-        console.log(`DEBUG: Table ID установлен через onOptions: ${currentTableId}`);
-    } else {
-        console.warn("ПРЕДУПРЕЖДЕНИЕ: Table ID не был предоставлен через grist.onOptions. Будет использован fallback (включая hardcoded).");
-    }
-}
-
-async function getEnsuredTableId() {
-    if (currentTableId) {
-        return currentTableId;
-    }
-    console.log("DEBUG: getEnsuredTableId - currentTableId is null, пытаемся получить через grist.selectedTable.getTableId()");
-    if (grist.selectedTable && typeof grist.selectedTable.getTableId === 'function') {
-        try {
-            const id = await grist.selectedTable.getTableId();
-            if (id) {
-                currentTableId = id;
-                console.log(`DEBUG: getEnsuredTableId - Table ID получен и кэширован через selectedTable: ${currentTableId}`);
-                return currentTableId;
-            } else {
-                console.warn("ПРЕДУПРЕЖДЕНИЕ: getEnsuredTableId - grist.selectedTable.getTableId() вернул falsy:", id);
-            }
-        } catch (e) {
-            console.error("ОШИБКА: getEnsuredTableId - ошибка при вызове grist.selectedTable.getTableId():", e);
-        }
-    } else {
-        console.warn("ПРЕДУПРЕЖДЕНИЕ: getEnsuredTableId - grist.selectedTable или getTableId недоступны.");
-    }
-
-    if (!currentTableId && HARDCODED_TABLE_ID) {
-        currentTableId = HARDCODED_TABLE_ID;
-        console.warn(`ПРЕДУПРЕЖДЕНИЕ: getEnsuredTableId - Table ID не удалось получить автоматически. Используется ЗАХАРДКОЖЕННЫЙ Table ID: "${currentTableId}"`);
-        return currentTableId;
-    }
-    console.error("ОШИБКА КРИТИЧЕСКАЯ: getEnsuredTableId - не удалось определить Table ID никаким способом.");
-    return null;
-}
-
-function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDraggable, dragEndCallback) {
-    const latLng = L.latLng(latLngLiteral.lat, latLngLiteral.lng);
-    if (!markerInstance) {
-        markerInstance = L.marker(latLng, { icon: icon, draggable: isDraggable, title: label }).addTo(map);
-        markerInstance.bindTooltip(label).openTooltip();
-    } else {
-        markerInstance.setLatLng(latLng);
-        if (markerInstance.getElement()) markerInstance.getElement().title = label;
-        markerInstance.getTooltip() ? markerInstance.setTooltipContent(label) : markerInstance.bindTooltip(label);
-        if (!markerInstance.isTooltipOpen()) markerInstance.openTooltip();
-        if (!map.hasLayer(markerInstance)) markerInstance.addTo(map);
-        if (markerInstance.options.icon !== icon) markerInstance.setIcon(icon);
-    }
-    if (markerInstance._onDragEndListener) markerInstance.off('dragend', markerInstance._onDragEndListener);
-    if (isDraggable && dragEndCallback) {
-        markerInstance.on('dragend', dragEndCallback);
-        markerInstance._onDragEndListener = dragEndCallback;
-    }
-    console.log(`DEBUG: Маркер "${label}" ${markerInstance._leaflet_id ? 'обновлен' : 'создан'}. Иконка:`, icon.options.iconUrl);
-    return markerInstance;
-}
-
-async function processMeetingPointData(lat, lng, tableId) {
-    if (!currentRecordId || !tableId) {
-        console.warn(`ПРЕДУПРЕЖДЕНИЕ: Нет Record ID (${currentRecordId}) или Table ID (${tableId}) для processMeetingPointData.`);
-        if (!tableId) alert("Ошибка: Таблица для обновления данных Места Встречи не определена (processMeetingPointData).");
-        return;
-    }
-    
-    console.log(`DEBUG: processMeetingPointData для Места Встречи: ${lat}, ${lng} (Table: ${tableId})`);
-    
-    let city_ru = '', county_ru = '', state_ru = '', suburb_ru = '';
-    let ttTA = 'N/A', ttJer = 'N/A', ttHai = 'N/A', ttBS = 'N/A';
-    
-    const googleMapsLink = `${GOOGLE_MAPS_BASE_URL_FOR_PLACE}${lat},${lng}`; 
-    console.log(`DEBUG: Сгенерирована ссылка Google Maps: ${googleMapsLink}`);
-
-    const wazeLink = `https://www.waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
-    console.log(`DEBUG: Сгенерирована ссылка Waze: ${wazeLink}`);
-
-
-    const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`;
-    try {
-        const rNom = await fetch(nomUrl); if (!rNom.ok) throw new Error(`Nominatim error ${rNom.status}`);
-        const dNom = await rNom.json();
-        if (dNom?.address) {
-            const a = dNom.address;
-            [city_ru, county_ru, state_ru, suburb_ru] = await Promise.all([
-                translateText(a.city || a.town || a.village || a.hamlet || '', 'ru', apiKey),
-                translateText(a.county || a.state_district || '', 'ru', apiKey),
-                translateText(a.state || '', 'ru', apiKey),
-                translateText(a.suburb || a.neighbourhood || a.borough || a.quarter || '', 'ru', apiKey)
-            ]);
-        } else { console.warn("Nominatim не вернул адрес для Места Встречи."); city_ru = "Адрес не найден"; }
-    } catch (e) { console.error("ОШИБКА Nominatim/Translate (Место Встречи):", e); city_ru = "Ошибка геокода"; }
-
-    const depDate = new Date(); let dToAdd = (5 - depDate.getDay() + 7) % 7;
-    if (dToAdd === 0 && depDate.getHours() >= 7) dToAdd = 7;
-    depDate.setDate(depDate.getDate() + dToAdd); depDate.setHours(7,0,0,0);
-
-    const origs = [ {lat:32.0853,lng:34.7818},{lat:31.7683,lng:35.2137},{lat:32.794,lng:34.9896},{lat:31.253,lng:34.7915} ];
-    try {
-        const tts = await Promise.all(origs.map(o => getTravelTime(o, {lat,lng}, depDate)));
-        [ttTA, ttJer, ttHai, ttBS] = tts.map(t => t || 'N/A');
-    } catch (e) { console.error("ОШИБКА Google Directions (Место Встречи):", e); }
-
-    const updData = { 
-        D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, 
-        I: ttTA, J: ttJer, K: ttHai, L: ttBS,
-        "GoogleDrive": googleMapsLink,
-        "Waze": wazeLink // ИЗМЕНЕНО: ключ на "Waze"
-    };
-    Object.keys(updData).forEach(k => (updData[k] === undefined || updData[k] === null || updData[k] === '') && delete updData[k]);
-    try {
-        await grist.docApi.applyUserActions([['UpdateRecord', tableId, currentRecordId, updData]]);
-        console.log("DEBUG: Данные адреса/времени/ссылок для Места встречи обновлены в Grist.");
-    } catch (e) { console.error("ОШИБКА обновления Grist (Meeting Point Data):", e); }
-}
-
-async function handleGristRecordUpdate(record, mappings) {
-    console.log("DEBUG: Grist record update:", record);
-    const previousRecordId = currentRecordId;
-    currentRecordId = record?.id || null;
-    console.log("DEBUG: Current Record ID:", currentRecordId);
-
-    if (previousRecordId !== currentRecordId) {
-        console.log("DEBUG: ID записи изменился, сбрасываем meetingPointJustUpdatedByAction и lastProcessedRecordIdForMeetingPoint.");
-        meetingPointJustUpdatedByAction = false; 
-        lastProcessedRecordIdForMeetingPoint = null; 
-    }
-    
-    if (!map) { console.warn("ПРЕДУПРЕЖДЕНИЕ: Карта не инициализирована."); return; }
-
-    if (meetingPointMarker) { meetingPointMarker.remove(); meetingPointMarker = null; }
-    if (routeStartMarker) { routeStartMarker.remove(); routeStartMarker = null; }
-    if (endRouteMarker) { endRouteMarker.remove(); endRouteMarker = null; }
-
-    if (!record) {
-        console.log("DEBUG: Запись Grist не выбрана.");
-        meetingPointJustUpdatedByAction = false;
-        lastProcessedRecordIdForMeetingPoint = null;
-        return;
-    }
-
-    const tableId = await getEnsuredTableId(); 
-
-    // Маркер "Старт маршрута" (зеленый, из X,Y)
-    if (typeof record.X === 'number' && typeof record.Y === 'number') {
-        const label = record.HikeStartLabel || `Старт маршрута (ID: ${record.id || 'N/A'})`;
-        routeStartMarker = updateOrCreateMarker(routeStartMarker, { lat: record.X, lng: record.Y }, label, greenIcon, true, onRouteStartMarkerDragEnd);
-    } else {
-        console.log("DEBUG: Координаты для 'Старта маршрута' (X,Y) отсутствуют.");
-    }
-
-    // Маркер "Место встречи" (синий, из B,C)
-    if (typeof record.B === 'number' && typeof record.C === 'number') {
-        const label = record.A || `Место встречи (ID: ${record.id || 'N/A'})`;
-        meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: record.B, lng: record.C }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
+    <script>
+        // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
+        let currentTable1RecordId = null;
+        let currentTable1Id = null; 
         
-        // ИЗМЕНЕНО: Проверяем поле с ID "Waze"
-        const meetingDataIsMissingOrEmpty = !record.D || record.D.trim() === '' || record.D === "Адрес не найден" || record.D === "Ошибка геокода" || 
-                                           !record.I || record.I.trim() === '' || record.I === 'N/A' || record.I.includes("Ошибка") ||
-                                           !record["GoogleDrive"] || !record["Waze"]; 
+        const TABLE1_ROUTE_NAME_COL_ID = "A"; 
+        const TABLE1_LAT_COL_ID = "B";        
+        const TABLE1_LNG_COL_ID = "C";        
 
-        if (tableId && (meetingPointJustUpdatedByAction || (lastProcessedRecordIdForMeetingPoint !== currentRecordId && meetingDataIsMissingOrEmpty) )) {
-            console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissingOrEmpty: ${meetingDataIsMissingOrEmpty}, lastProcessedRecId: ${lastProcessedRecordIdForMeetingPoint}, currentRecId: ${currentRecordId}`);
-            await processMeetingPointData(record.B, record.C, tableId);
-            lastProcessedRecordIdForMeetingPoint = currentRecordId; 
-        } else if (!tableId) {
-            console.warn("ПРЕДУПРЕЖДЕНИЕ: Table ID не установлен, processMeetingPointData не будет вызван для Места Встречи.");
-        } else {
-            console.log("DEBUG: Данные для Места Встречи уже существуют или не требуют немедленной переобработки. Пропуск processMeetingPointData.");
-        }
-    } else {
-        console.log("DEBUG: Координаты для 'Места встречи' (B,C) отсутствуют.");
-        if (lastProcessedRecordIdForMeetingPoint === currentRecordId) { 
-             lastProcessedRecordIdForMeetingPoint = null;
-        }
-    }
-    meetingPointJustUpdatedByAction = false; 
+        const TABLE2_ID = "Table2"; 
+        const TABLE2_HIKE_DATE_COL_ID = "A";     
+        const TABLE2_HIKE_TIME_COL_ID = "K";     
+        const TABLE2_ROUTE_NAME_COL_ID = "F";    
+        const TABLE2_TEMPERATURE_COL_ID = "I";   
+        const TABLE2_WEATHER_DESC_COL_ID = "J";  
 
-    // Маркер "Конец маршрута" (пурпурный, из Z,AA)
-    if (typeof record.Z === 'number' && typeof record.AA === 'number') {
-        const label = record.EndRouteLabel || `Конец маршрута (ID: ${record.id || 'N/A'})`;
-        endRouteMarker = updateOrCreateMarker(endRouteMarker, { lat: record.Z, lng: record.AA }, label, purpleIcon, true, onEndRouteMarkerDragEnd);
-    } else {
-        console.log("DEBUG: Координаты для 'Конца маршрута' (Z,AA) отсутствуют.");
-    }
-    
-    const activeMarkers = [meetingPointMarker, routeStartMarker, endRouteMarker].filter(m => m !== null);
-    if (activeMarkers.length > 1) map.fitBounds(new L.featureGroup(activeMarkers).getBounds().pad(0.2));
-    else if (activeMarkers.length === 1) map.flyTo(activeMarkers[0].getLatLng(), MARKER_ZOOM_LEVEL);
-}
+        const statusDiv = document.getElementById('status');
 
-async function updateGristCoordinates(markerType, lat, lng) { 
-    const tableId = await getEnsuredTableId(); 
-
-    if (!currentRecordId || !tableId) {
-        console.warn(`ПРЕДУПРЕЖДЕНИЕ: Нет Record ID (${currentRecordId}) или Table ID (${tableId}) для updateGristCoordinates (${markerType})`);
-        if (!tableId) {
-             alert("Ошибка: Таблица для обновления не определена (updateGristCoordinates).");
-        }
-        return false;
-    }
-
-    let updateData = {};
-    if (markerType === 'routeStart') { 
-        updateData = { X: lat, Y: lng };
-    } else if (markerType === 'meetingPoint') { 
-        updateData = { B: lat, C: lng };
-    } else if (markerType === 'endRoute') { 
-        updateData = { Z: lat, AA: lng };
-    } else {
-        console.error("ОШИБКА: Неизвестный тип маркера для обновления координат:", markerType); return false;
-    }
-    try {
-        await grist.docApi.applyUserActions([['UpdateRecord', tableId, currentRecordId, updateData]]);
-        console.log(`DEBUG: Координаты Grist для "${markerType}" обновлены:`, updateData);
-        return true; 
-    } catch (e) { console.error(`ОШИБКА обновления Grist (${markerType} coords):`, e); return false;}
-}
-
-async function onMeetingPointMarkerDragEnd(event) {
-    const pos = event.target.getLatLng();
-    console.log(`DEBUG: "Место встречи" (синий) перетащено: ${pos.lat}, ${pos.lng}`);
-    meetingPointJustUpdatedByAction = true; 
-    await updateGristCoordinates('meetingPoint', pos.lat, pos.lng); 
-}
-
-async function onRouteStartMarkerDragEnd(event) {
-    const pos = event.target.getLatLng();
-    console.log(`DEBUG: "Старт маршрута" (зеленый) перетащен: ${pos.lat}, ${pos.lng}`);
-    await updateGristCoordinates('routeStart', pos.lat, pos.lng); 
-}
-
-async function onEndRouteMarkerDragEnd(event) {
-    const pos = event.target.getLatLng();
-    console.log(`DEBUG: "Конец маршрута" (пурпурный) перетащен: ${pos.lat}, ${pos.lng}`);
-    await updateGristCoordinates('endRoute', pos.lat, pos.lng);
-}
-
-async function handleMapClick(e) {
-    if (!e.latlng) { console.warn("ПРЕДУПРЕЖДЕНИЕ: Клик без координат."); return; }
-    
-    if (!currentRecordId && grist.selectedRecord && typeof grist.selectedRecord.get === 'function') {
-        try {
-            const rec = await grist.selectedRecord.get();
-            if (rec && rec.id) {
-                currentRecordId = rec.id;
-                console.log(`DEBUG: handleMapClick - currentRecordId получен через selectedRecord.get(): ${currentRecordId}`);
+        function transformColumnarData(columnarData) {
+            if (!columnarData || typeof columnarData.id === 'undefined' || !Array.isArray(columnarData.id)) {
+                console.warn("transformColumnarData: Данные не в ожидаемом колончатом формате или пусты.", columnarData);
+                return Array.isArray(columnarData) ? columnarData : []; 
             }
-        } catch (err) { console.warn("Не удалось получить selectedRecord.id при клике", err); }
-    }
+            const numRows = columnarData.id.length;
+            const rows = [];
+            const columnIds = Object.keys(columnarData);
+            for (let i = 0; i < numRows; i++) {
+                const row = {};
+                for (const colId of columnIds) {
+                    if (columnarData[colId] && columnarData[colId].length > i) {
+                        row[colId] = columnarData[colId][i];
+                    } else { row[colId] = null; }
+                }
+                rows.push(row);
+            }
+            console.log("DEBUG: Данные преобразованы из колончатого формата:", rows);
+            return rows;
+        }
 
-    if (!currentRecordId) { alert("Сначала выберите строку в Grist."); return; }
+        function formatDate_YYYY_MM_DD(dateValue) {
+            if (dateValue === null || dateValue === undefined || dateValue === 0) {
+                console.warn("formatDate_YYYY_MM_DD: Получено пустое или нулевое значение даты:", dateValue);
+                return null; 
+            }
+            let dateObj;
+            if (typeof dateValue === 'number') { 
+                dateObj = new Date(dateValue * 1000);
+            } else if (dateValue instanceof Date) {
+                dateObj = dateValue;
+            } else {
+                console.warn("Неверный формат даты для formatDate_YYYY_MM_DD:", dateValue, "(тип:", typeof dateValue, ")");
+                return null;
+            }
+            if (isNaN(dateObj.getTime())) { 
+                console.warn("Не удалось создать валидный объект Date из значения:", dateValue);
+                return null;
+            }
+            const year = dateObj.getUTCFullYear(); 
+            const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0'); 
+            const day = String(dateObj.getUTCDate()).padStart(2, '0');
+            const formattedDate = `${year}-${month}-${day}`;
+            console.log(`DEBUG: formatDate_YYYY_MM_DD: Отформатированная дата: ${formattedDate}`);
+            return formattedDate;
+        }
 
-    const tableId = await getEnsuredTableId(); 
-    if (!tableId) {
-        alert("Ошибка: Таблица для обновления не определена. Проверьте конфигурацию виджета или выберите запись снова.");
-        console.error("ОШИБКА: handleMapClick - Table ID не определен. Обновление невозможно.");
-        return;
-    }
+        function getWeatherDescriptionFromWMO(code) {
+            const wmoDescriptions = {
+                0: 'Ясно', 1: 'В основном ясно, облака рассеиваются', 2: 'Переменная облачность', 3: 'Пасмурно',
+                45: 'Туман', 48: 'Изморозь (оседающий туман)',
+                51: 'Морось: легкая', 53: 'Морось: умеренная', 55: 'Морось: сильная',
+                56: 'Ледяная морось: легкая', 57: 'Ледяная морось: сильная',
+                61: 'Дождь: слабый', 63: 'Дождь: умеренный', 65: 'Дождь: сильный',
+                66: 'Ледяной дождь: слабый', 67: 'Ледяной дождь: сильный',
+                71: 'Снегопад: слабый', 73: 'Снегопад: умеренный', 75: 'Снегопад: сильный',
+                77: 'Снежные зерна',
+                80: 'Ливень: слабый', 81: 'Ливень: умеренный', 82: 'Ливень: сильный (проливной)',
+                85: 'Снежный ливень: слабый', 86: 'Снежный ливень: сильный',
+                95: 'Гроза: слабая или умеренная', 
+                96: 'Гроза со слабым градом', 
+                99: 'Гроза с сильным градом'
+            };
+            const description = wmoDescriptions[code];
+            if (description) {
+                console.log(`DEBUG: getWeatherDescriptionFromWMO: код ${code} -> "${description}"`);
+                return description;
+            } else {
+                console.warn(`DEBUG: getWeatherDescriptionFromWMO: Неизвестный WMO код: ${code}`);
+                return `Погодный код ${code}`;
+            }
+        }
 
-    const lat = e.latlng.lat;
-    const lng = e.latlng.lng;
-    const clickPosition = { lat: lat, lng: lng };
-    
-    if (!meetingPointMarker) {
-        const label = `Место встречи (ID: ${currentRecordId})`;
-        console.log(`DEBUG: Клик для установки "Место встречи" (синий): ${lat}, ${lng}.`);
-        meetingPointMarker = updateOrCreateMarker(meetingPointMarker, clickPosition, label, blueIcon, true, onMeetingPointMarkerDragEnd);
-        meetingPointJustUpdatedByAction = true; 
-        await updateGristCoordinates('meetingPoint', lat, lng);
-    } else if (!routeStartMarker) {
-        const label = `Старт маршрута (ID: ${currentRecordId})`;
-        console.log(`DEBUG: Клик для установки "Старт маршрута" (зеленый): ${lat}, ${lng}.`);
-        routeStartMarker = updateOrCreateMarker(routeStartMarker, clickPosition, label, greenIcon, true, onRouteStartMarkerDragEnd);
-        await updateGristCoordinates('routeStart', lat, lng);
-    } else if (!endRouteMarker) {
-        const label = `Конец маршрута (ID: ${currentRecordId})`;
-        console.log(`DEBUG: Клик для установки "Конец маршрута" (пурпурный): ${lat}, ${lng}.`);
-        endRouteMarker = updateOrCreateMarker(endRouteMarker, clickPosition, label, purpleIcon, true, onEndRouteMarkerDragEnd);
-        await updateGristCoordinates('endRoute', lat, lng);
-    } else {
-        console.log("DEBUG: Все три маркера уже установлены. Клик проигнорирован.");
-        alert("Все три основных маркера уже установлены. Для изменения их положения, перетащите их.");
-    }
-}
+        async function getHourlyWeatherForHike(lat, lng, dateString, targetHour) {
+            statusDiv.innerHTML += `Запрос погоды для ${dateString} на ${String(targetHour).padStart(2, '0')}:00...\n`;
+            statusDiv.className = 'processing';
+            console.log(`DEBUG: Запрос почасовой погоды: lat=${lat}, lng=${lng}, date=${dateString}, targetHour=${targetHour}`);
 
-function checkApis() {
-    const leafletReady = typeof L === 'object' && L.map;
-    const googleReady = typeof google === 'object' && google.maps && google.maps.DirectionsService;
-    console.log(`DEBUG: API check: Leaflet=${leafletReady}, Google Maps (Directions)=${googleReady}`);
-    if (leafletReady && googleReady) initMap();
-    else setTimeout(checkApis, 250);
-}
+            if (!dateString || typeof lat !== 'number' || typeof lng !== 'number' || typeof targetHour !== 'number' || targetHour < 0 || targetHour > 23) {
+                console.warn("DEBUG: getHourlyWeatherForHike - неверные параметры (дата/координаты/час).");
+                return { temperature: "N/A (неверные параметры)", description: "N/A (неверные параметры)" };
+            }
+            
+            const weatherApiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&hourly=temperature_2m,weathercode&start_date=${dateString}&end_date=${dateString}&timezone=auto`;
+            
+            try {
+                const response = await fetch(weatherApiUrl);
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ reason: "Не удалось получить детали ошибки" }));
+                    console.error("Ошибка API Open-Meteo (hourly):", response.status, errorData);
+                    throw new Error(`Open-Meteo API error: ${response.status} - ${errorData.reason || 'Unknown error'}`);
+                }
+                const data = await response.json();
+                console.log("DEBUG: Ответ Open-Meteo (hourly):", data);
+                
+                let temperature = "N/A (нет данных)";
+                let description = "N/A (нет данных)";
+                let weatherCode = null;
 
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.27): Запуск checkApis.");
-checkApis();
-// === КОНЕЦ СКРИПТА ===
+                if (data && data.hourly && data.hourly.time && data.hourly.temperature_2m && data.hourly.weathercode) {
+                    const targetISOStringPart = `${dateString}T${String(targetHour).padStart(2, '0')}:00`;
+                    const hourIndex = data.hourly.time.findIndex(timeStr => timeStr.startsWith(targetISOStringPart));
+
+                    if (hourIndex !== -1) {
+                        console.log(`DEBUG: Найден индекс ${hourIndex} для времени ${targetISOStringPart}`);
+                        const temp = data.hourly.temperature_2m[hourIndex];
+                        if (temp !== null && temp !== undefined) {
+                            temperature = `${temp.toFixed(1)} °C`;
+                        }
+                        weatherCode = data.hourly.weathercode[hourIndex];
+                        if (weatherCode !== null && weatherCode !== undefined) {
+                            description = getWeatherDescriptionFromWMO(weatherCode);
+                        }
+                    } else {
+                        console.warn(`Не найдено данных для времени ${targetISOStringPart} в ответе Open-Meteo.`);
+                    }
+                } else {
+                     console.warn("Open-Meteo не вернул ожидаемые почасовые данные (time, temperature_2m, weathercode).", data);
+                }
+                return { temperature, description, weatherCode }; 
+
+            } catch (error) {
+                console.error("ОШИБКА при запросе почасовой погоды Open-Meteo:", error);
+                return { temperature: "Ошибка погоды", description: "Ошибка погоды", weatherCode: null };
+            }
+        }
+
+        async function handleTable1Record(recordTable1, mappings) {
+            if (!recordTable1 || typeof recordTable1.id === 'undefined') {
+                statusDiv.textContent = "Запись в Table1 не выбрана или невалидна.";
+                statusDiv.className = '';
+                currentRecordId = null;
+                return;
+            }
+            currentRecordId = recordTable1.id;
+            console.log("DEBUG: Выбрана запись в Table1:", recordTable1);
+            statusDiv.textContent = `Обработка записи ID ${currentRecordId} из Table1...\n`;
+            statusDiv.className = 'processing';
+
+            const routeNameTable1 = recordTable1[TABLE1_ROUTE_NAME_COL_ID];
+            const latTable1 = recordTable1[TABLE1_LAT_COL_ID];
+            const lngTable1 = recordTable1[TABLE1_LNG_COL_ID];
+
+            if (typeof latTable1 !== 'number' || typeof lngTable1 !== 'number') {
+                statusDiv.textContent = "Ошибка: В выбранной записи Table1 отсутствуют координаты (колонки B, C).";
+                statusDiv.className = 'error'; return;
+            }
+            if (!routeNameTable1) {
+                statusDiv.textContent = "Ошибка: В выбранной записи Table1 отсутствует Название маршрута (колонка A).";
+                statusDiv.className = 'error'; return;
+            }
+
+            try {
+                console.log(`DEBUG: Попытка загрузить ${TABLE2_ID}. ID для связи: "${routeNameTable1}"`);
+                const rawTable2Data = await grist.docApi.fetchTable(TABLE2_ID);
+                const table2Rows = transformColumnarData(rawTable2Data); 
+                console.log(`DEBUG: Преобразованные данные из ${TABLE2_ID} (количество строк: ${table2Rows.length}):`, table2Rows);
+
+                if (!Array.isArray(table2Rows)) { 
+                    console.error(`ОШИБКА: Данные из ${TABLE2_ID} не удалось преобразовать в массив.`);
+                    statusDiv.textContent = `Ошибка: не удалось обработать данные из таблицы ${TABLE2_ID}.`;
+                    statusDiv.className = 'error'; return;
+                }
+
+                const matchingRowsInTable2 = table2Rows.filter(row => row && typeof row === 'object' && row[TABLE2_ROUTE_NAME_COL_ID] === routeNameTable1);
+
+                if (matchingRowsInTable2.length === 0) {
+                    statusDiv.textContent = `В ${TABLE2_ID} не найдено записей для маршрута "${routeNameTable1}".`;
+                    statusDiv.className = ''; return;
+                }
+
+                let updatesMade = 0;
+                statusDiv.innerHTML = `Найдено ${matchingRowsInTable2.length} записей в ${TABLE2_ID} для маршрута "${routeNameTable1}". Получение погоды...\n`;
+
+                for (const rowTable2 of matchingRowsInTable2) {
+                    const hikeDateTimestamp = rowTable2[TABLE2_HIKE_DATE_COL_ID];
+                    const hikeTimeValue = rowTable2[TABLE2_HIKE_TIME_COL_ID]; // Значение из колонки K
+                    
+                    console.log(`DEBUG: Обработка строки Table2.id=${rowTable2.id}, дата (timestamp): ${hikeDateTimestamp}, значение времени из колонки K:`, hikeTimeValue, `(тип: ${typeof hikeTimeValue})`);
+                    
+                    const hikeDateFormatted = formatDate_YYYY_MM_DD(hikeDateTimestamp);
+                    
+                    if (!hikeDateFormatted) {
+                        statusDiv.innerHTML += `Пропуск строки ID ${rowTable2.id} (неверная/пустая дата).\n`; continue;
+                    }
+
+                    let startHour = null;
+                    let targetHour = 12; // Час по умолчанию
+
+                    if (typeof hikeTimeValue === 'number' && hikeTimeValue > 0) { // Если K - timestamp
+                        const timeObj = new Date(hikeTimeValue * 1000);
+                        if (!isNaN(timeObj.getTime())) {
+                            startHour = timeObj.getHours(); // Используем getHours() для локального времени браузера
+                            console.log(`DEBUG: Извлечен час (локальный) из timestamp ${hikeTimeValue} (колонка K): ${startHour}`);
+                        } else {
+                             console.warn(`Не удалось создать валидный объект Date из timestamp ${hikeTimeValue} (колонка K).`);
+                        }
+                    } else if (typeof hikeTimeValue === 'string' && hikeTimeValue.includes(':')) { // Если K - строка "ЧЧ:ММ"
+                        const parts = hikeTimeValue.split(':');
+                        const parsedHour = parseInt(parts[0], 10);
+                        if (!isNaN(parsedHour) && parsedHour >= 0 && parsedHour <= 23) {
+                            startHour = parsedHour;
+                             console.log(`DEBUG: Извлечен час из строки "${hikeTimeValue}" (колонка K): ${startHour}`);
+                        } else {
+                            console.warn(`Неверный формат времени (строка) "${hikeTimeValue}" в колонке K.`);
+                        }
+                    } else {
+                        console.warn(`Время в колонке K (${hikeTimeValue}) не является числовым timestamp или строкой ЧЧ:ММ.`);
+                    }
+
+                    if (startHour !== null) {
+                        targetHour = (startHour + 4); 
+                        if (targetHour >= 24) { 
+                            targetHour = 23; 
+                            console.warn(`Целевой час (${startHour + 4}) выходит за пределы суток для даты ${hikeDateFormatted}, используется 23:00`);
+                        }
+                    } else {
+                        console.warn(`Не удалось определить час начала похода из колонки K. Используется час по умолчанию: ${targetHour}:00`);
+                    }
+                    console.log(`DEBUG: Целевой час для запроса погоды: ${targetHour}`);
+
+
+                    const weatherData = await getHourlyWeatherForHike(latTable1, lngTable1, hikeDateFormatted, targetHour);
+                    
+                    console.log(`DEBUG: Для ${TABLE2_ID}.id=${rowTable2.id}, дата=${hikeDateFormatted}, время=${String(targetHour).padStart(2, '0')}:00, ПОЛУЧЕНЫ ДАННЫЕ ПОГОДЫ:`, weatherData);
+                    statusDiv.innerHTML += `Для даты ${hikeDateFormatted} на ${String(targetHour).padStart(2, '0')}:00: Темп.=${weatherData.temperature}, Описание=${weatherData.description}\n`;
+
+                    const updatePayload = {};
+                    let shouldUpdate = false;
+
+                    if (weatherData.temperature !== "N/A (нет даты/коорд.)" && weatherData.temperature !== "Ошибка погоды" && weatherData.temperature !== "N/A (нет данных)") {
+                        updatePayload[TABLE2_TEMPERATURE_COL_ID] = weatherData.temperature;
+                        shouldUpdate = true;
+                    }
+                    
+                    const isDescriptionValid = weatherData.description && 
+                                             weatherData.description !== "N/A (нет даты/коорд.)" && 
+                                             weatherData.description !== "Ошибка погоды" && 
+                                             weatherData.description !== "N/A (нет данных)" &&
+                                             !weatherData.description.startsWith("Неизвестный код"); 
+                    
+                    if (isDescriptionValid) {
+                        updatePayload[TABLE2_WEATHER_DESC_COL_ID] = weatherData.description; 
+                        shouldUpdate = true;
+                    } else {
+                        console.warn(`DEBUG: Описание погоды для ${TABLE2_ID}.id=${rowTable2.id} невалидно или отсутствует: "${weatherData.description}"`);
+                    }
+                    
+                    console.log(`DEBUG: Для ${TABLE2_ID}.id=${rowTable2.id}, updatePayload ПЕРЕД отправкой:`, JSON.parse(JSON.stringify(updatePayload)), `shouldUpdate: ${shouldUpdate}`);
+
+                    if (shouldUpdate && Object.keys(updatePayload).length > 0) {
+                        await grist.docApi.applyUserActions([
+                            ['UpdateRecord', TABLE2_ID, rowTable2.id, updatePayload]
+                        ]);
+                        updatesMade++;
+                        console.log(`DEBUG: Обновлены данные для ${TABLE2_ID}.id=${rowTable2.id}:`, updatePayload);
+                    } else {
+                        console.log(`DEBUG: Обновление для ${TABLE2_ID}.id=${rowTable2.id} не требуется или payload пуст.`);
+                    }
+                }
+                if (updatesMade > 0) {
+                    statusDiv.innerHTML += `<b>Успешно обновлено ${updatesMade} записей в ${TABLE2_ID}!</b>`;
+                    statusDiv.className = 'success';
+                } else {
+                    statusDiv.innerHTML += `Не удалось обновить данные в ${TABLE2_ID} (возможно, нет новых данных или были ошибки).`;
+                    statusDiv.className = 'error';
+                }
+
+            } catch (error) {
+                console.error("ОШИБКА при обработке записи Table1 или обновлении Table2:", error);
+                statusDiv.textContent = `Ошибка: ${error.message}`;
+                statusDiv.className = 'error';
+            }
+        }
+
+        function initGrist() {
+            console.log("DEBUG: initGrist() called");
+            if (typeof grist === 'undefined' || !grist.ready) {
+                console.error("Grist API не найден. Убедитесь, что скрипт запущен внутри Grist.");
+                statusDiv.textContent = "Ошибка: Grist API не найден.";
+                statusDiv.className = 'error';
+                return;
+            }
+
+            grist.ready({
+                requiredAccess: 'full', 
+                columns: [ 
+                    { name: TABLE1_ROUTE_NAME_COL_ID, type: 'Text' },
+                    { name: TABLE1_LAT_COL_ID, type: 'Numeric' },
+                    { name: TABLE1_LNG_COL_ID, type: 'Numeric' },
+                ]
+            });
+
+            grist.onOptions((options, interaction) => {
+                console.log("DEBUG: grist.onOptions - options:", options, "interaction:", interaction);
+                currentTable1Id = (options?.tableId) || (interaction?.tableId) || null;
+                if (currentTable1Id) {
+                    console.log(`DEBUG: ID основной таблицы (Table1) установлен: ${currentTable1Id}`);
+                } else {
+                    console.error("ОШИБКА КРИТИЧЕСКАЯ: ID основной таблицы (Table1) не предоставлен виджету. Убедитесь, что виджет связан с Table1.");
+                    statusDiv.textContent = "Ошибка конфигурации: виджет не связан с Table1.";
+                    statusDiv.className = 'error';
+                }
+            });
+
+            grist.onRecord(handleTable1Record);
+            console.log("DEBUG: Grist API настроен и готов. Версия виджета: v1.11");
+            statusDiv.textContent = "Виджет готов. Выберите строку в Table1.";
+        }
+        initGrist();
+    </script>
+</body>
+</html>
