@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.36 - Улучшено поведение для новых записей) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.37 - Убрано сообщение alert) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -440,7 +440,6 @@ async function handleGristRecordUpdate(record, mappings) {
     const valB = getVal("B");
     const valC = getVal("C");
 
-    // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Условие для создания маркера Места Встречи ---
     if (typeof valB === 'number' && typeof valC === 'number' && (valB !== 0 || valC !== 0)) { 
         const label = valA || `Место встречи (ID: ${currentRecordId})`;
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: valB, lng: valC }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
@@ -465,7 +464,6 @@ async function handleGristRecordUpdate(record, mappings) {
         console.log("DEBUG: Координаты для 'Места встречи' (B,C) отсутствуют, некорректны или (0,0). B:", valB, "C:", valC);
         if (lastProcessedRecordIdForMeetingPoint === currentRecordId) { lastProcessedRecordIdForMeetingPoint = null; }
     }
-    // --- КОНЕЦ ИЗМЕНЕНИЯ ---
     meetingPointJustUpdatedByAction = false;
 
     const valZ = getVal("Z");
@@ -619,7 +617,7 @@ async function handleMapClick(event) {
         await updateGristCoordinates('endRoute', clickedLat, clickedLng);
     } else {
         console.log("DEBUG: Все три основных маркера уже установлены. Клик по карте проигнорирован.");
-        alert("Все три основных маркера уже установлены. Для изменения их положения, перетащите их.");
+        // alert("Все три основных маркера уже установлены. Для изменения их положения, перетащите их."); // Сообщение убрано
     }
 }
 
@@ -636,6 +634,6 @@ function checkApis() {
         setTimeout(checkApis, 250);
     }
 }
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.35 - Исправлена ошибка getWidgetColumnTitle): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.36_a - Улучшено поведение для новых записей): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
