@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.33 - Всплывающие окна по наведению) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.34 - Исправления для новых записей и KeyError) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -27,7 +27,7 @@ const commonIconOptions = {
     iconSize: [32, 32],
     iconAnchor: [16, 32],
     popupAnchor: [0, -32],
-    tooltipAnchor: [16, -24] // Смещение для всплывающей подсказки, чтобы она была над иконкой
+    tooltipAnchor: [16, -24] 
 };
 
 const blueIcon = L.icon({ ...commonIconOptions, iconUrl: blueIconUrl });
@@ -178,7 +178,7 @@ async function fetchAndDisplayIsraelHikingRoute(routeId) {
 function initMap() {
     console.log("DEBUG: initMap()");
     try {
-        map = L.map('map').setView([31.771959, 35.217018], 8);
+        map = L.map('map').setView([31.771959, 35.217018], 8); // Default to Jerusalem center
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19, attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(map);
@@ -204,14 +204,14 @@ function setupGrist() {
             { name: "Y", type: 'Numeric', optional: true, title: 'Старт маршрута Долгота' },
             { name: "HikeStartLabel", type: 'Text', optional: true, title: 'Название Старта маршрута' },
             { name: "A", type: 'Text', optional: true, title: 'Название Места встречи' },
-            { name: "B", type: 'Numeric', title: 'Место встречи Широта' },
-            { name: "C", type: 'Numeric', title: 'Место встречи Долгота' },
+            { name: "B", type: 'Numeric', title: 'Место встречи Широта' }, // Should default to Jerusalem for new records
+            { name: "C", type: 'Numeric', title: 'Место встречи Долгота' }, // Should default to Jerusalem for new records
             { name: "GoogleDrive", type: 'Text', optional: true, title: 'Место встреч. Google Карта ссылка' },
             { name: "Waze", type: 'Text', optional: true, title: 'Место встреч. Waze ссылка' },
             { name: "D", type: 'Text', optional: true, title: 'Адрес Места встречи: Город' },
             { name: "E", type: 'Text', optional: true, title: 'Адрес Места встречи: Район' },
             { name: "F", type: 'Text', optional: true, title: 'Адрес Места встречи: Округ' },
-            { name: "H_Meeting", type: 'Text', optional: true, title: 'Адрес Места встречи: Микрорайон/Окрестность' },
+            { name: "H_Meeting", type: 'Text', optional: true, title: 'Адрес Места встречи: Микрорайон/Окрестность' }, // Mapped to "H"
             { name: "I", type: 'Text', optional: true, title: 'К Месту встречи: Время из Тель-Авива' },
             { name: "J", type: 'Text', optional: true, title: 'К Месту встречи: Время из Иерусалима' },
             { name: "K", type: 'Text', optional: true, title: 'К Месту встречи: Время из Хайфы' },
@@ -259,17 +259,15 @@ async function getEnsuredTableId() {
     return currentTableId;
 }
 
-// --- ИЗМЕНЕННАЯ ФУНКЦИЯ ---
 function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDraggable, dragEndCallback) {
     const latLng = L.latLng(latLngLiteral.lat, latLngLiteral.lng); 
-
     if (!markerInstance) { 
         markerInstance = L.marker(latLng, {
             icon: icon,
             draggable: isDraggable,
-            title: label // Нативный title для ховера
+            title: label 
         }).addTo(map);
-        markerInstance.bindTooltip(label); // Привязываем tooltip, но не открываем его сразу
+        markerInstance.bindTooltip(label); 
         console.log(`DEBUG: Маркер "${label}" создан. Иконка:`, icon.options.iconUrl);
     } else { 
         markerInstance.setLatLng(latLng);
@@ -281,7 +279,6 @@ function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDrag
         } else {
             markerInstance.bindTooltip(label);
         }
-        // Убрали .openTooltip() отсюда
         if (!map.hasLayer(markerInstance)) { 
             markerInstance.addTo(map);
         }
@@ -290,7 +287,6 @@ function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDrag
         }
         console.log(`DEBUG: Маркер "${label}" обновлен. Иконка:`, icon.options.iconUrl);
     }
-
     if (markerInstance._onDragEndListener) {
         markerInstance.off('dragend', markerInstance._onDragEndListener);
     }
@@ -300,12 +296,16 @@ function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDrag
     }
     return markerInstance;
 }
-// --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
-async function processMeetingPointData(lat, lng, tableId) {
+// --- ИЗМЕНЕННАЯ ФУНКЦИЯ processMeetingPointData ---
+async function processMeetingPointData(lat, lng, tableId, mappings) { // Добавлен параметр mappings
     if (!currentRecordId || !tableId) {
         console.warn(`ПРЕДУПРЕЖДЕНИЕ: Нет Record ID (${currentRecordId}) или Table ID (${tableId}) для processMeetingPointData.`);
         if (!tableId) alert("Ошибка: Таблица для обновления данных Места Встречи не определена (processMeetingPointData).");
+        return;
+    }
+     if (!mappings) {
+        console.error("ОШИБКА: Mappings не переданы в processMeetingPointData. Невозможно обновить Grist.");
         return;
     }
     console.log(`DEBUG: processMeetingPointData для Места Встречи: ${lat}, ${lng} (Table: ${tableId}, Record: ${currentRecordId})`);
@@ -328,7 +328,6 @@ async function processMeetingPointData(lat, lng, tableId) {
                 translateText(addr.state || '', 'ru', apiKey),
                 translateText(addr.suburb || addr.neighbourhood || addr.borough || addr.quarter || '', 'ru', apiKey)
             ]);
-            console.log(`DEBUG: Nominatim address components (RU): City=${city_ru}, County=${county_ru}, State=${state_ru}, Suburb=${suburb_ru}`);
         } else {
             console.warn("Nominatim не вернул адрес для Места Встречи. Response:", dataNominatim);
             city_ru = "Адрес не найден (Nominatim)";
@@ -342,15 +341,33 @@ async function processMeetingPointData(lat, lng, tableId) {
     if (daysUntilNextFriday === 0 && departureDateTime.getHours() >= 7) { daysUntilNextFriday = 7; }
     departureDateTime.setDate(departureDateTime.getDate() + daysUntilNextFriday);
     departureDateTime.setHours(7, 0, 0, 0);
-    console.log(`DEBUG: Расчетное время выезда для Google Directions: ${departureDateTime.toLocaleString('he-IL')}`);
     const originLocations = [ { lat: 32.0853, lng: 34.7818 }, { lat: 31.7683, lng: 35.2137 }, { lat: 32.7940, lng: 34.9896 }, { lat: 31.2530, lng: 34.7915 } ];
     try {
         const travelTimesPromises = originLocations.map(origin => getTravelTime(origin, { lat, lng }, departureDateTime));
         [ttTA, ttJer, ttHai, ttBS] = (await Promise.all(travelTimesPromises)).map(t => t || 'N/A');
-        console.log(`DEBUG: Travel times: TA=${ttTA}, Jer=${ttJer}, Hai=${ttHai}, BS=${ttBS}`);
     } catch (error) { console.error("ОШИБКА Google Directions (Место Встречи, пакетный запрос):", error); }
-    const updatePayload = { D: city_ru, E: county_ru, F: state_ru, H_Meeting: suburb_ru, I: ttTA, J: ttJer, K: ttHai, L: ttBS, "GoogleDrive": googleMapsLink, "Waze": wazeLink };
-    Object.keys(updatePayload).forEach(key => (updatePayload[key] === undefined || updatePayload[key] === null || updatePayload[key] === '') && delete updatePayload[key]);
+
+    const updatePayload = {};
+    // Используем mappings для получения реальных ID колонок Grist
+    if (mappings.D) updatePayload[mappings.D] = city_ru;
+    if (mappings.E) updatePayload[mappings.E] = county_ru;
+    if (mappings.F) updatePayload[mappings.F] = state_ru;
+    if (mappings.H_Meeting) updatePayload[mappings.H_Meeting] = suburb_ru; // H_Meeting - имя поля в widget, mappings.H_Meeting - ID колонки в Grist (например "H")
+    if (mappings.I) updatePayload[mappings.I] = ttTA;
+    if (mappings.J) updatePayload[mappings.J] = ttJer;
+    if (mappings.K) updatePayload[mappings.K] = ttHai;
+    if (mappings.L) updatePayload[mappings.L] = ttBS;
+    if (mappings.GoogleDrive) updatePayload[mappings.GoogleDrive] = googleMapsLink;
+    if (mappings.Waze) updatePayload[mappings.Waze] = wazeLink;
+    
+    // Удаляем ключи с undefined значениями (если колонка не была сопоставлена)
+    // или пустые строки, чтобы не перезаписывать существующие данные пустыми строками
+    Object.keys(updatePayload).forEach(key => {
+        if (updatePayload[key] === undefined || updatePayload[key] === null || String(updatePayload[key]).trim() === '') {
+            delete updatePayload[key];
+        }
+    });
+
     if (Object.keys(updatePayload).length > 0) {
         try {
             console.log(`DEBUG: Попытка обновить Grist для Record ID ${currentRecordId} в Table ID ${tableId} данными:`, updatePayload);
@@ -360,8 +377,9 @@ async function processMeetingPointData(lat, lng, tableId) {
             console.error("ОШИБКА обновления Grist (Meeting Point Data):", error);
             alert(`Ошибка при обновлении данных в Grist: ${error.message}`);
         }
-    } else { console.log("DEBUG: Нет данных для обновления в Grist (все поля пустые после обработки)."); }
+    } else { console.log("DEBUG: Нет данных для обновления в Grist (все поля пустые или не сопоставлены)."); }
 }
+// --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
 async function handleGristRecordUpdate(record, mappings) {
     console.log("DEBUG: Grist record update received. Full Record:", JSON.stringify(record));
@@ -404,30 +422,36 @@ async function handleGristRecordUpdate(record, mappings) {
 
     const getVal = (fieldName) => {
         if (!mappings || !record) return undefined;
-        const gristColId = mappings[fieldName];
+        const gristColId = mappings[fieldName]; // Get the actual Grist column ID
         if (gristColId && record.hasOwnProperty(gristColId)) { return record[gristColId]; }
-        if (gristColId === null) { console.log(`DEBUG: Widget field '${fieldName}' is not mapped by the user.`); }
+        // Log if the widget field is defined but not mapped by the user
+        if (mappings.hasOwnProperty(fieldName) && gristColId === null) { 
+            console.log(`DEBUG: Widget field '${fieldName}' (title: '${grist.widgetApi.getWidgetColumnTitle(fieldName) || fieldName}') is not mapped by the user in Creator Panel.`);
+        }
         return undefined;
     };
-
+    
+    // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Условия для создания маркеров старта и конца ---
     const valX = getVal("X");
     const valY = getVal("Y");
-    const valHikeStartLabel = getVal("HikeStartLabel") || getVal("A");
+    const valHikeStartLabel = getVal("HikeStartLabel") || getVal("A"); // Fallback for label
 
-    if (typeof valX === 'number' && typeof valY === 'number') {
+    // Создаем маркер старта только если X и Y - числа И хотя бы одно из них не 0
+    if (typeof valX === 'number' && typeof valY === 'number' && (valX !== 0 || valY !== 0)) {
         const label = valHikeStartLabel || `Старт маршрута (ID: ${currentRecordId})`;
         routeStartMarker = updateOrCreateMarker(routeStartMarker, { lat: valX, lng: valY }, label, greenIcon, true, onRouteStartMarkerDragEnd);
     } else {
-        console.log("DEBUG: Координаты для 'Старта маршрута' (X,Y) отсутствуют или некорректны. X:", valX, "Y:", valY);
+        console.log("DEBUG: Координаты для 'Старта маршрута' (X,Y) отсутствуют, некорректны или (0,0). X:", valX, "Y:", valY);
     }
 
     const valA = getVal("A");
     const valB = getVal("B");
     const valC = getVal("C");
 
-    if (typeof valB === 'number' && typeof valC === 'number') {
+    if (typeof valB === 'number' && typeof valC === 'number') { // Место встречи всегда должно иметь координаты
         const label = valA || `Место встречи (ID: ${currentRecordId})`;
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: valB, lng: valC }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
+        
         const valD = getVal("D");
         const valI = getVal("I");
         const valGoogleDrive = getVal("GoogleDrive");
@@ -437,7 +461,7 @@ async function handleGristRecordUpdate(record, mappings) {
                                            !valGoogleDrive || !valWaze;
         if (tableId && (meetingPointJustUpdatedByAction || (lastProcessedRecordIdForMeetingPoint !== currentRecordId && meetingDataIsMissingOrEmpty))) {
             console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissingOrEmpty: ${meetingDataIsMissingOrEmpty}, lastProcessedRecId: ${lastProcessedRecordIdForMeetingPoint}, currentRecId: ${currentRecordId}`);
-            await processMeetingPointData(valB, valC, tableId);
+            await processMeetingPointData(valB, valC, tableId, mappings); // Передаем mappings
             lastProcessedRecordIdForMeetingPoint = currentRecordId;
         } else if (!tableId) {
             console.warn("ПРЕДУПРЕЖДЕНИЕ: Table ID не установлен, processMeetingPointData не будет вызван для Места Встречи.");
@@ -445,7 +469,7 @@ async function handleGristRecordUpdate(record, mappings) {
             console.log("DEBUG: Данные для Места Встречи уже существуют или не требуют немедленной переобработки.");
         }
     } else {
-        console.log("DEBUG: Координаты для 'Места встречи' (B,C) отсутствуют. B:", valB, "C:", valC);
+        console.log("DEBUG: Координаты для 'Места встречи' (B,C) отсутствуют или некорректны. B:", valB, "C:", valC);
         if (lastProcessedRecordIdForMeetingPoint === currentRecordId) { lastProcessedRecordIdForMeetingPoint = null; }
     }
     meetingPointJustUpdatedByAction = false;
@@ -454,12 +478,15 @@ async function handleGristRecordUpdate(record, mappings) {
     const valAA = getVal("AA");
     const valEndRouteLabel = getVal("EndRouteLabel");
 
-    if (typeof valZ === 'number' && typeof valAA === 'number') {
+    // Создаем маркер конца только если Z и AA - числа И хотя бы одно из них не 0
+    if (typeof valZ === 'number' && typeof valAA === 'number' && (valZ !== 0 || valAA !== 0)) {
         const label = valEndRouteLabel || `Конец маршрута (ID: ${currentRecordId})`;
         endRouteMarker = updateOrCreateMarker(endRouteMarker, { lat: valZ, lng: valAA }, label, purpleIcon, true, onEndRouteMarkerDragEnd);
     } else {
-        console.log("DEBUG: Координаты для 'Конца маршрута' (Z,AA) отсутствуют. Z:", valZ, "AA:", valAA);
+        console.log("DEBUG: Координаты для 'Конца маршрута' (Z,AA) отсутствуют, некорректны или (0,0). Z:", valZ, "AA:", valAA);
     }
+    // --- КОНЕЦ ИЗМЕНЕНИЯ ---
+
 
     const rWidgetFieldName = "R";
     const rGristColumnId = mappings && mappings.hasOwnProperty(rWidgetFieldName) ? mappings[rWidgetFieldName] : null;
@@ -469,11 +496,11 @@ async function handleGristRecordUpdate(record, mappings) {
         israelHikingUrl = record[rGristColumnId];
         console.log(`DEBUG (Israel Hiking): Для поля виджета '${rWidgetFieldName}', колонка Grist '${rGristColumnId}' имеет значение: "${israelHikingUrl}" (тип: ${typeof israelHikingUrl})`);
     } else {
-        if (!record) { console.log(`DEBUG (Israel Hiking): Record is null. Cannot access data for widget field '${rWidgetFieldName}'.`); }
-        else if (!mappings) { console.log(`DEBUG (Israel Hiking): Mappings object is null. Cannot determine Grist column for widget field '${rWidgetFieldName}'.`); }
-        else if (!mappings.hasOwnProperty(rWidgetFieldName)) { console.log(`DEBUG (Israel Hiking): Widget field '${rWidgetFieldName}' (title: 'Ссылка Israel Hiking Map') not found in mappings object. Mappings:`, JSON.stringify(mappings)); }
-        else if (rGristColumnId === null) { console.log(`DEBUG (Israel Hiking): Widget field '${rWidgetFieldName}' (title: 'Ссылка Israel Hiking Map') не сопоставлен пользователем ни с какой колонкой Grist в Creator Panel.`); }
-        else { console.log(`DEBUG (Israel Hiking): Колонка Grist '${rGristColumnId}' (для поля виджета '${rWidgetFieldName}') не найдена как свойство в полученной записи. Ключи записи: ${Object.keys(record).join(', ')}`); }
+        if (!record) { console.log(`DEBUG (Israel Hiking): Record is null.`); }
+        else if (!mappings) { console.log(`DEBUG (Israel Hiking): Mappings object is null.`); }
+        else if (!mappings.hasOwnProperty(rWidgetFieldName)) { console.log(`DEBUG (Israel Hiking): Widget field '${rWidgetFieldName}' not found in mappings. Mappings:`, JSON.stringify(mappings)); }
+        else if (rGristColumnId === null) { console.log(`DEBUG (Israel Hiking): Widget field '${rWidgetFieldName}' not mapped by user.`); }
+        else { console.log(`DEBUG (Israel Hiking): Grist column '${rGristColumnId}' for widget field '${rWidgetFieldName}' not in record. Keys: ${Object.keys(record).join(', ')}`); }
     }
 
     const israelHikingUrlPattern = /https:\/\/israelhiking\.osm\.org\.il\/(?:share\/|view\/)?([a-zA-Z0-9_-]+)/;
@@ -481,14 +508,14 @@ async function handleGristRecordUpdate(record, mappings) {
         const match = israelHikingUrl.match(israelHikingUrlPattern);
         if (match && match[1]) {
             const routeId = match[1];
-            console.log(`DEBUG (Israel Hiking): Извлечен ID маршрута: ${routeId} из URL "${israelHikingUrl}" (получено из колонки ${rGristColumnId || 'R (предположительно)'}).`);
+            console.log(`DEBUG (Israel Hiking): Извлечен ID маршрута: ${routeId} из URL "${israelHikingUrl}"`);
             await fetchAndDisplayIsraelHikingRoute(routeId);
         } else {
-            console.log(`DEBUG (Israel Hiking): Значение "${israelHikingUrl}" из колонки ${rGristColumnId || 'R (предположительно)'} не является валидной ссылкой Israel Hiking Map или ID не извлечен.`);
+            console.log(`DEBUG (Israel Hiking): URL "${israelHikingUrl}" невалиден или ID не извлечен.`);
             if (israelHikingPolyline && map.hasLayer(israelHikingPolyline)) { map.removeLayer(israelHikingPolyline); israelHikingPolyline = null; }
         }
     } else {
-        console.log(`DEBUG (Israel Hiking): Итоговое значение israelHikingUrl пустое, null или не строка (значение: "${israelHikingUrl}", тип: ${typeof israelHikingUrl}). Маршрут Israel Hiking Map не будет отображен.`);
+        console.log(`DEBUG (Israel Hiking): israelHikingUrl пустой или не строка. Значение: "${israelHikingUrl}"`);
         if (israelHikingPolyline && map.hasLayer(israelHikingPolyline)) { map.removeLayer(israelHikingPolyline); israelHikingPolyline = null; }
     }
 
@@ -529,6 +556,9 @@ async function updateGristCoordinates(markerType, lat, lng) {
         return false;
     }
     let updatePayload = {};
+    // Здесь мы используем имена полей виджета (X, Y, B, C, Z, AA),
+    // так как Grist сам преобразует их в ID колонок при `applyUserActions`
+    // если `grist.ready` был вызван с этими именами.
     switch (markerType) {
         case 'routeStart': updatePayload = { X: lat, Y: lng }; break;
         case 'meetingPoint': updatePayload = { B: lat, C: lng }; break;
@@ -565,13 +595,15 @@ async function onEndRouteMarkerDragEnd(event) {
 
 async function handleMapClick(event) {
     if (!event.latlng) { console.warn("ПРЕДУПРЕЖДЕНИЕ: Клик по карте без координат."); return; }
+    let currentMappings = await grist.mappingsP; // Получаем актуальные mappings
+
     if (!currentRecordId && grist.selectedRecord?.get) {
         try {
             const selectedRec = await grist.selectedRecord.get();
             if (selectedRec?.id) {
                 currentRecordId = selectedRec.id;
                 console.log(`DEBUG: handleMapClick - currentRecordId получен через selectedRecord.get(): ${currentRecordId}. Вызываем handleGristRecordUpdate.`);
-                await handleGristRecordUpdate(selectedRec, await grist.mappingsP); // Передаем также mappings
+                await handleGristRecordUpdate(selectedRec, currentMappings); 
             }
         } catch (err) { console.warn("Не удалось получить selectedRecord.id при клике на карте:", err); }
     }
@@ -616,7 +648,6 @@ function checkApis() {
         setTimeout(checkApis, 250);
     }
 }
-// В логе запуска указываем актуальную версию
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.32_a - Корректный парсинг latlngs из segments): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.33_a - Всплывающие окна по наведению): Запуск checkApis."); // Обновляем версию в логе
 checkApis();
 // === КОНЕЦ СКРИПТА ===
