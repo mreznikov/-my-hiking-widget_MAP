@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.30 - Улучшенное логирование latlngs) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.31 - Исправлен путь к latlngs в ответе API) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -124,25 +124,7 @@ async function fetchAndDisplayIsraelHikingRoute(routeId) {
         }
         const data = await response.json();
         console.log(`DEBUG (Israel Hiking): Ответ API успешно распарсен в JSON.`);
-        // --- Начало улучшенного логирования ---
-        console.log(`DEBUG (Israel Hiking): Полный объект data, полученный от API (глубокая копия):`, JSON.parse(JSON.stringify(data)));
-
-        if (data && data.hasOwnProperty('latlngs')) {
-            console.log(`DEBUG (Israel Hiking): Ключ 'latlngs' СУЩЕСТВУЕТ в объекте data.`);
-            console.log(`DEBUG (Israel Hiking): Тип data.latlngs: ${typeof data.latlngs}`);
-            console.log(`DEBUG (Israel Hiking): Является ли data.latlngs массивом: ${Array.isArray(data.latlngs)}`);
-            if (Array.isArray(data.latlngs)) {
-                console.log(`DEBUG (Israel Hiking): Длина массива data.latlngs: ${data.latlngs.length}`);
-                if (data.latlngs.length > 0) {
-                    console.log(`DEBUG (Israel Hiking): Первый элемент data.latlngs (если есть):`, data.latlngs[0]);
-                }
-            } else {
-                console.log(`DEBUG (Israel Hiking): data.latlngs НЕ является массивом. Значение:`, data.latlngs);
-            }
-        } else {
-            console.log(`DEBUG (Israel Hiking): Ключ 'latlngs' ОТСУТСТВУЕТ в объекте data. Ключи объекта data: ${data ? Object.keys(data).join(', ') : 'data is null/undefined'}`);
-        }
-        // --- Конец улучшенного логирования ---
+        console.log(`DEBUG (Israel Hiking): Полный объект data, полученный от API:`, JSON.parse(JSON.stringify(data)));
 
         if (israelHikingPolyline && map.hasLayer(israelHikingPolyline)) {
             console.log(`DEBUG (Israel Hiking): Удаление существующего полилайна Israel Hiking Map.`);
@@ -150,10 +132,31 @@ async function fetchAndDisplayIsraelHikingRoute(routeId) {
         }
         israelHikingPolyline = null;
 
-        // Используем более строгую проверку
-        if (data && Array.isArray(data.latlngs) && data.latlngs.length > 0) {
-            console.log(`DEBUG (Israel Hiking): Условие для отрисовки пройдено. Найдено ${data.latlngs.length} точек.`);
-            const latLngsArray = data.latlngs.map(point => [point.lat, point.lng]);
+        // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Пытаемся получить latlngs из data.dataContainer ---
+        const routePoints = data?.dataContainer?.latlngs;
+
+        console.log(`DEBUG (Israel Hiking): Проверка data.dataContainer:`, data?.dataContainer);
+        if (data?.dataContainer && data.dataContainer.hasOwnProperty('latlngs')) {
+            console.log(`DEBUG (Israel Hiking): Ключ 'latlngs' СУЩЕСТВУЕТ в объекте data.dataContainer.`);
+            console.log(`DEBUG (Israel Hiking): Тип data.dataContainer.latlngs: ${typeof routePoints}`);
+            console.log(`DEBUG (Israel Hiking): Является ли data.dataContainer.latlngs массивом: ${Array.isArray(routePoints)}`);
+            if (Array.isArray(routePoints)) {
+                console.log(`DEBUG (Israel Hiking): Длина массива data.dataContainer.latlngs: ${routePoints.length}`);
+                if (routePoints.length > 0) {
+                    console.log(`DEBUG (Israel Hiking): Первый элемент data.dataContainer.latlngs (если есть):`, routePoints[0]);
+                }
+            } else {
+                console.log(`DEBUG (Israel Hiking): data.dataContainer.latlngs НЕ является массивом. Значение:`, routePoints);
+            }
+        } else {
+            console.log(`DEBUG (Israel Hiking): Ключ 'latlngs' ОТСУТСТВУЕТ в объекте data.dataContainer или data.dataContainer не существует. Ключи data.dataContainer: ${data?.dataContainer ? Object.keys(data.dataContainer).join(', ') : 'data.dataContainer is null/undefined'}`);
+        }
+        // --- КОНЕЦ ИЗМЕНЕНИЯ ---
+
+
+        if (Array.isArray(routePoints) && routePoints.length > 0) {
+            console.log(`DEBUG (Israel Hiking): Условие для отрисовки пройдено. Найдено ${routePoints.length} точек в data.dataContainer.latlngs.`);
+            const latLngsArray = routePoints.map(point => [point.lat, point.lng]);
             console.log(`DEBUG (Israel Hiking): Точки маршрута преобразованы в формат Leaflet.`);
             if (latLngsArray.length > 0) { console.log(`DEBUG (Israel Hiking): Пример первых 3 точек: ${JSON.stringify(latLngsArray.slice(0,3))}`); }
             israelHikingPolyline = L.polyline(latLngsArray, { color: 'red', weight: 3, opacity: 0.8 });
@@ -161,7 +164,7 @@ async function fetchAndDisplayIsraelHikingRoute(routeId) {
             israelHikingPolyline.addTo(map);
             console.log(`DEBUG (Israel Hiking): Полилайн маршрута Israel Hiking Map добавлен на карту.`);
         } else {
-            console.warn(`DEBUG (Israel Hiking): Условие для отрисовки НЕ пройдено. Проверьте предыдущие логи по 'latlngs'. ID: ${routeId}. Объект data (как он есть):`, data);
+            console.warn(`DEBUG (Israel Hiking): Условие для отрисовки НЕ пройдено. 'routePoints' (из data.dataContainer.latlngs) не является непустым массивом. ID: ${routeId}. Значение routePoints:`, routePoints);
         }
     } catch (error) {
         console.error(`DEBUG (Israel Hiking): Ошибка при загрузке или отображении маршрута Israel Hiking Map для ID: ${routeId}`, error);
@@ -593,6 +596,6 @@ function checkApis() {
         setTimeout(checkApis, 250);
     }
 }
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.30 - Улучшенное логирование latlngs): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.30 - Улучшенное логирование latlngs): Запуск checkApis."); // Обновил версию в логе для соответствия
 checkApis();
 // === КОНЕЦ СКРИПТА ===
