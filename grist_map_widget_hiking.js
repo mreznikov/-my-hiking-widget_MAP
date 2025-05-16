@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.31 - Исправлен путь к latlngs в ответе API) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.32 - Корректный парсинг latlngs из segments) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -132,39 +132,43 @@ async function fetchAndDisplayIsraelHikingRoute(routeId) {
         }
         israelHikingPolyline = null;
 
-        // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Пытаемся получить latlngs из data.dataContainer ---
-        const routePoints = data?.dataContainer?.latlngs;
-
-        console.log(`DEBUG (Israel Hiking): Проверка data.dataContainer:`, data?.dataContainer);
-        if (data?.dataContainer && data.dataContainer.hasOwnProperty('latlngs')) {
-            console.log(`DEBUG (Israel Hiking): Ключ 'latlngs' СУЩЕСТВУЕТ в объекте data.dataContainer.`);
-            console.log(`DEBUG (Israel Hiking): Тип data.dataContainer.latlngs: ${typeof routePoints}`);
-            console.log(`DEBUG (Israel Hiking): Является ли data.dataContainer.latlngs массивом: ${Array.isArray(routePoints)}`);
-            if (Array.isArray(routePoints)) {
-                console.log(`DEBUG (Israel Hiking): Длина массива data.dataContainer.latlngs: ${routePoints.length}`);
-                if (routePoints.length > 0) {
-                    console.log(`DEBUG (Israel Hiking): Первый элемент data.dataContainer.latlngs (если есть):`, routePoints[0]);
+        // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Извлекаем точки из всех сегментов всех маршрутов ---
+        let allRoutePoints = [];
+        if (data?.dataContainer?.routes && Array.isArray(data.dataContainer.routes)) {
+            console.log(`DEBUG (Israel Hiking): Найдено ${data.dataContainer.routes.length} маршрут(ов) в dataContainer.`);
+            data.dataContainer.routes.forEach((route, routeIndex) => {
+                if (route?.segments && Array.isArray(route.segments)) {
+                    console.log(`DEBUG (Israel Hiking): Маршрут ${routeIndex}: Найдено ${route.segments.length} сегмент(ов).`);
+                    route.segments.forEach((segment, segmentIndex) => {
+                        if (segment?.latlngs && Array.isArray(segment.latlngs) && segment.latlngs.length > 0) {
+                            console.log(`DEBUG (Israel Hiking): Маршрут ${routeIndex}, Сегмент ${segmentIndex}: Найдено ${segment.latlngs.length} точек.`);
+                            // Преобразуем точки {lat, lng, alt, timestamp} в [lat, lng]
+                            const segmentPoints = segment.latlngs.map(p => [p.lat, p.lng]);
+                            allRoutePoints = allRoutePoints.concat(segmentPoints);
+                        } else {
+                            console.log(`DEBUG (Israel Hiking): Маршрут ${routeIndex}, Сегмент ${segmentIndex}: 'latlngs' отсутствуют или пусты.`);
+                        }
+                    });
+                } else {
+                     console.log(`DEBUG (Israel Hiking): Маршрут ${routeIndex}: 'segments' отсутствуют или не являются массивом.`);
                 }
-            } else {
-                console.log(`DEBUG (Israel Hiking): data.dataContainer.latlngs НЕ является массивом. Значение:`, routePoints);
-            }
+            });
         } else {
-            console.log(`DEBUG (Israel Hiking): Ключ 'latlngs' ОТСУТСТВУЕТ в объекте data.dataContainer или data.dataContainer не существует. Ключи data.dataContainer: ${data?.dataContainer ? Object.keys(data.dataContainer).join(', ') : 'data.dataContainer is null/undefined'}`);
+            console.log(`DEBUG (Israel Hiking): 'routes' отсутствуют в data.dataContainer или не являются массивом.`);
         }
         // --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
-
-        if (Array.isArray(routePoints) && routePoints.length > 0) {
-            console.log(`DEBUG (Israel Hiking): Условие для отрисовки пройдено. Найдено ${routePoints.length} точек в data.dataContainer.latlngs.`);
-            const latLngsArray = routePoints.map(point => [point.lat, point.lng]);
-            console.log(`DEBUG (Israel Hiking): Точки маршрута преобразованы в формат Leaflet.`);
-            if (latLngsArray.length > 0) { console.log(`DEBUG (Israel Hiking): Пример первых 3 точек: ${JSON.stringify(latLngsArray.slice(0,3))}`); }
-            israelHikingPolyline = L.polyline(latLngsArray, { color: 'red', weight: 3, opacity: 0.8 });
+        if (allRoutePoints.length > 0) {
+            console.log(`DEBUG (Israel Hiking): Условие для отрисовки пройдено. Всего найдено ${allRoutePoints.length} точек во всех сегментах.`);
+            // const latLngsArray = allRoutePoints; // Уже в нужном формате [lat, lng]
+            if (allRoutePoints.length > 0) { console.log(`DEBUG (Israel Hiking): Пример первых 3 точек из allRoutePoints: ${JSON.stringify(allRoutePoints.slice(0,3))}`); }
+            
+            israelHikingPolyline = L.polyline(allRoutePoints, { color: 'red', weight: 3, opacity: 0.8 });
             console.log(`DEBUG (Israel Hiking): Объект L.polyline создан.`);
             israelHikingPolyline.addTo(map);
             console.log(`DEBUG (Israel Hiking): Полилайн маршрута Israel Hiking Map добавлен на карту.`);
         } else {
-            console.warn(`DEBUG (Israel Hiking): Условие для отрисовки НЕ пройдено. 'routePoints' (из data.dataContainer.latlngs) не является непустым массивом. ID: ${routeId}. Значение routePoints:`, routePoints);
+            console.warn(`DEBUG (Israel Hiking): Условие для отрисовки НЕ пройдено. 'allRoutePoints' (из всех сегментов) пуст. ID: ${routeId}.`);
         }
     } catch (error) {
         console.error(`DEBUG (Israel Hiking): Ошибка при загрузке или отображении маршрута Israel Hiking Map для ID: ${routeId}`, error);
@@ -596,6 +600,7 @@ function checkApis() {
         setTimeout(checkApis, 250);
     }
 }
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.30_1 - Улучшенное логирование latlngs): Запуск checkApis."); // Обновил версию в логе для соответствия
+// В логе запуска указываем актуальную версию
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.31 - Исправлен путь к latlngs в ответе API): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
