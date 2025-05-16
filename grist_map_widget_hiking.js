@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.35 - Исправлена ошибка getWidgetColumnTitle) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.36 - Улучшено поведение для новых записей) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -415,19 +415,15 @@ async function handleGristRecordUpdate(record, mappings) {
         return;
     }
 
-    // --- ИСПРАВЛЕНИЕ getVal ---
     const getVal = (fieldName) => {
         if (!mappings || !record) return undefined;
         const gristColId = mappings[fieldName]; 
         if (gristColId && record.hasOwnProperty(gristColId)) { return record[gristColId]; }
-        
-        // Убрана попытка вызова grist.widgetApi.getWidgetColumnTitle
         if (mappings.hasOwnProperty(fieldName) && gristColId === null) { 
             console.log(`DEBUG: Widget field '${fieldName}' is not mapped by the user in Creator Panel.`);
         }
         return undefined;
     };
-    // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
     
     const valX = getVal("X");
     const valY = getVal("Y");
@@ -444,7 +440,8 @@ async function handleGristRecordUpdate(record, mappings) {
     const valB = getVal("B");
     const valC = getVal("C");
 
-    if (typeof valB === 'number' && typeof valC === 'number') { 
+    // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Условие для создания маркера Места Встречи ---
+    if (typeof valB === 'number' && typeof valC === 'number' && (valB !== 0 || valC !== 0)) { 
         const label = valA || `Место встречи (ID: ${currentRecordId})`;
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: valB, lng: valC }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
         
@@ -465,9 +462,10 @@ async function handleGristRecordUpdate(record, mappings) {
             console.log("DEBUG: Данные для Места Встречи уже существуют или не требуют немедленной переобработки.");
         }
     } else {
-        console.log("DEBUG: Координаты для 'Места встречи' (B,C) отсутствуют или некорректны. B:", valB, "C:", valC);
+        console.log("DEBUG: Координаты для 'Места встречи' (B,C) отсутствуют, некорректны или (0,0). B:", valB, "C:", valC);
         if (lastProcessedRecordIdForMeetingPoint === currentRecordId) { lastProcessedRecordIdForMeetingPoint = null; }
     }
+    // --- КОНЕЦ ИЗМЕНЕНИЯ ---
     meetingPointJustUpdatedByAction = false;
 
     const valZ = getVal("Z");
@@ -638,6 +636,6 @@ function checkApis() {
         setTimeout(checkApis, 250);
     }
 }
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.34 - Исправления для новых записей и KeyError): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.35 - Исправлена ошибка getWidgetColumnTitle): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
