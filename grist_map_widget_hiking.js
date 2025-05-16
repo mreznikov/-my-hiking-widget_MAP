@@ -596,6 +596,6 @@ function checkApis() {
         setTimeout(checkApis, 250);
     }
 }
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.30 - Улучшенное логирование latlngs): Запуск checkApis."); // Обновил версию в логе для соответствия
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.30_1 - Улучшенное логирование latlngs): Запуск checkApis."); // Обновил версию в логе для соответствия
 checkApis();
 // === КОНЕЦ СКРИПТА ===
