@@ -871,7 +871,7 @@ function checkApis() {
 }
 
 // Запуск проверки API при загрузке скрипта
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.28 - Israel Hiking Map): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.28_a - Israel Hiking Map): Запуск checkApis.");
 checkApis();
 
 // === КОНЕЦ СКРИПТА ===
