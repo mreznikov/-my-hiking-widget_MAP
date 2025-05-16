@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.32 - Корректный парсинг latlngs из segments) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.33 - Всплывающие окна по наведению) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -27,7 +27,7 @@ const commonIconOptions = {
     iconSize: [32, 32],
     iconAnchor: [16, 32],
     popupAnchor: [0, -32],
-    tooltipAnchor: [16, -24]
+    tooltipAnchor: [16, -24] // Смещение для всплывающей подсказки, чтобы она была над иконкой
 };
 
 const blueIcon = L.icon({ ...commonIconOptions, iconUrl: blueIconUrl });
@@ -132,7 +132,6 @@ async function fetchAndDisplayIsraelHikingRoute(routeId) {
         }
         israelHikingPolyline = null;
 
-        // --- ИЗМЕНЕНИЕ ЗДЕСЬ: Извлекаем точки из всех сегментов всех маршрутов ---
         let allRoutePoints = [];
         if (data?.dataContainer?.routes && Array.isArray(data.dataContainer.routes)) {
             console.log(`DEBUG (Israel Hiking): Найдено ${data.dataContainer.routes.length} маршрут(ов) в dataContainer.`);
@@ -142,7 +141,6 @@ async function fetchAndDisplayIsraelHikingRoute(routeId) {
                     route.segments.forEach((segment, segmentIndex) => {
                         if (segment?.latlngs && Array.isArray(segment.latlngs) && segment.latlngs.length > 0) {
                             console.log(`DEBUG (Israel Hiking): Маршрут ${routeIndex}, Сегмент ${segmentIndex}: Найдено ${segment.latlngs.length} точек.`);
-                            // Преобразуем точки {lat, lng, alt, timestamp} в [lat, lng]
                             const segmentPoints = segment.latlngs.map(p => [p.lat, p.lng]);
                             allRoutePoints = allRoutePoints.concat(segmentPoints);
                         } else {
@@ -156,11 +154,9 @@ async function fetchAndDisplayIsraelHikingRoute(routeId) {
         } else {
             console.log(`DEBUG (Israel Hiking): 'routes' отсутствуют в data.dataContainer или не являются массивом.`);
         }
-        // --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
         if (allRoutePoints.length > 0) {
             console.log(`DEBUG (Israel Hiking): Условие для отрисовки пройдено. Всего найдено ${allRoutePoints.length} точек во всех сегментах.`);
-            // const latLngsArray = allRoutePoints; // Уже в нужном формате [lat, lng]
             if (allRoutePoints.length > 0) { console.log(`DEBUG (Israel Hiking): Пример первых 3 точек из allRoutePoints: ${JSON.stringify(allRoutePoints.slice(0,3))}`); }
             
             israelHikingPolyline = L.polyline(allRoutePoints, { color: 'red', weight: 3, opacity: 0.8 });
@@ -263,28 +259,48 @@ async function getEnsuredTableId() {
     return currentTableId;
 }
 
+// --- ИЗМЕНЕННАЯ ФУНКЦИЯ ---
 function updateOrCreateMarker(markerInstance, latLngLiteral, label, icon, isDraggable, dragEndCallback) {
-    const latLng = L.latLng(latLngLiteral.lat, latLngLiteral.lng);
-    if (!markerInstance) {
-        markerInstance = L.marker(latLng, { icon: icon, draggable: isDraggable, title: label }).addTo(map);
-        markerInstance.bindTooltip(label).openTooltip();
+    const latLng = L.latLng(latLngLiteral.lat, latLngLiteral.lng); 
+
+    if (!markerInstance) { 
+        markerInstance = L.marker(latLng, {
+            icon: icon,
+            draggable: isDraggable,
+            title: label // Нативный title для ховера
+        }).addTo(map);
+        markerInstance.bindTooltip(label); // Привязываем tooltip, но не открываем его сразу
         console.log(`DEBUG: Маркер "${label}" создан. Иконка:`, icon.options.iconUrl);
-    } else {
+    } else { 
         markerInstance.setLatLng(latLng);
-        if (markerInstance.getElement()) { markerInstance.getElement().title = label; }
-        if (markerInstance.getTooltip()) { markerInstance.setTooltipContent(label); } else { markerInstance.bindTooltip(label); }
-        if (!markerInstance.isTooltipOpen()) { markerInstance.openTooltip(); }
-        if (!map.hasLayer(markerInstance)) { markerInstance.addTo(map); }
-        if (markerInstance.options.icon !== icon) { markerInstance.setIcon(icon); }
+        if (markerInstance.getElement()) { 
+            markerInstance.getElement().title = label;
+        }
+        if (markerInstance.getTooltip()) {
+            markerInstance.setTooltipContent(label);
+        } else {
+            markerInstance.bindTooltip(label);
+        }
+        // Убрали .openTooltip() отсюда
+        if (!map.hasLayer(markerInstance)) { 
+            markerInstance.addTo(map);
+        }
+        if (markerInstance.options.icon !== icon) { 
+            markerInstance.setIcon(icon);
+        }
         console.log(`DEBUG: Маркер "${label}" обновлен. Иконка:`, icon.options.iconUrl);
     }
-    if (markerInstance._onDragEndListener) { markerInstance.off('dragend', markerInstance._onDragEndListener); }
+
+    if (markerInstance._onDragEndListener) {
+        markerInstance.off('dragend', markerInstance._onDragEndListener);
+    }
     if (isDraggable && dragEndCallback) {
         markerInstance.on('dragend', dragEndCallback);
         markerInstance._onDragEndListener = dragEndCallback;
     }
     return markerInstance;
 }
+// --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
 async function processMeetingPointData(lat, lng, tableId) {
     if (!currentRecordId || !tableId) {
@@ -601,6 +617,6 @@ function checkApis() {
     }
 }
 // В логе запуска указываем актуальную версию
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.31 - Исправлен путь к latlngs в ответе API): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.32_a - Корректный парсинг latlngs из segments): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
