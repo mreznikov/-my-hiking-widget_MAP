@@ -73,7 +73,7 @@ async function translateText(text, targetLang, apiKey) {
         if (data?.data?.translations?.[0]?.translatedText) {
             const translated = data.data.translations[0].translatedText;
             console.log(`DEBUG: translateText success: "${text}" -> "${translated}"`);
-            // Декодирование HTML сущностей (например, &#39; -> ')
+            // Декодирование HTML сущностей (например, ' -> ')
             const textarea = document.createElement('textarea');
             textarea.innerHTML = translated;
             return textarea.value;
@@ -151,52 +151,75 @@ async function getTravelTime(originLatLng, destinationLatLng, departureTime) {
  */
 async function fetchAndDisplayIsraelHikingRoute(routeId) {
     if (!routeId) {
-        console.warn("DEBUG: fetchAndDisplayIsraelHikingRoute: routeId не предоставлен.");
-        // Убедимся, что старый полилайн удален, если ID не передан
+        console.warn("DEBUG (Israel Hiking): routeId не предоставлен. Очистка полилайна, если существует.");
         if (israelHikingPolyline && map.hasLayer(israelHikingPolyline)) {
             map.removeLayer(israelHikingPolyline);
         }
         israelHikingPolyline = null;
         return;
     }
-    console.log(`DEBUG: Fetching Israel Hiking Map route for ID: ${routeId}`);
+    console.log(`DEBUG (Israel Hiking): Начало fetchAndDisplayIsraelHikingRoute для ID: ${routeId}`);
     const apiUrl = `https://israelhiking.osm.org.il/api/Urls/${routeId}`;
+    console.log(`DEBUG (Israel Hiking): Формирование URL API: ${apiUrl}`);
 
     try {
+        console.log(`DEBUG (Israel Hiking): Отправка запроса к API: ${apiUrl}`);
         const response = await fetch(apiUrl);
-        if (!response.ok) {
+        const responseStatus = response.status;
+        const responseOk = response.ok;
+        console.log(`DEBUG (Israel Hiking): Получен ответ от API. Статус: ${responseStatus}, OK: ${responseOk}`);
+
+        if (!responseOk) {
             const errorText = await response.text();
-            throw new Error(`Israel Hiking API error ${response.status}: ${errorText}. URL: ${apiUrl}`);
+            console.error(`DEBUG (Israel Hiking): Ошибка API. Статус: ${responseStatus}, Текст ошибки: ${errorText}`);
+            throw new Error(`Israel Hiking API error ${responseStatus}: ${errorText}. URL: ${apiUrl}`);
         }
+
         const data = await response.json();
+        console.log(`DEBUG (Israel Hiking): Ответ API успешно распарсен в JSON.`);
+        // Для более детального логирования можно вывести сами данные, но это может быть объемно:
+        // console.log(`DEBUG (Israel Hiking): Полученные данные (первые 500 символов): ${JSON.stringify(data).substring(0, 500)}`);
+
 
         // Удаляем предыдущий полилайн, если он есть, перед добавлением нового или если новый пуст
         if (israelHikingPolyline && map.hasLayer(israelHikingPolyline)) {
+            console.log(`DEBUG (Israel Hiking): Удаление существующего полилайна Israel Hiking Map.`);
             map.removeLayer(israelHikingPolyline);
         }
         israelHikingPolyline = null; // Сбрасываем в любом случае
 
         if (data && data.latlngs && Array.isArray(data.latlngs) && data.latlngs.length > 0) {
-            const latLngsArray = data.latlngs.map(point => [point.lat, point.lng]); // Преобразуем в формат, понятный Leaflet
+            console.log(`DEBUG (Israel Hiking): Найдено ${data.latlngs.length} точек маршрута в ответе API.`);
+            const latLngsArray = data.latlngs.map(point => [point.lat, point.lng]);
+            console.log(`DEBUG (Israel Hiking): Точки маршрута преобразованы в формат Leaflet.`);
+            // Логирование первых нескольких точек для проверки
+            if (latLngsArray.length > 0) {
+                console.log(`DEBUG (Israel Hiking): Пример первых 3 точек: ${JSON.stringify(latLngsArray.slice(0,3))}`);
+            }
+
 
             israelHikingPolyline = L.polyline(latLngsArray, {
                 color: 'red',    // Цвет линии
                 weight: 3,       // Толщина линии
                 opacity: 0.8     // Прозрачность линии
-            }).addTo(map);
-            console.log(`DEBUG: Israel Hiking Map route displayed with ${latLngsArray.length} points.`);
+            });
+            console.log(`DEBUG (Israel Hiking): Объект L.polyline создан.`);
+
+            israelHikingPolyline.addTo(map);
+            console.log(`DEBUG (Israel Hiking): Полилайн маршрута Israel Hiking Map добавлен на карту.`);
         } else {
-            console.warn(`DEBUG: No latlngs found or empty array in Israel Hiking API response for ID: ${routeId}. Response:`, data);
+            console.warn(`DEBUG (Israel Hiking): В ответе API не найдены точки маршрута (latlngs) или массив пуст для ID: ${routeId}. Ответ:`, data);
             // Полилайн уже сброшен выше
         }
     } catch (error) {
-        console.error(`DEBUG: Failed to fetch or display Israel Hiking Map route for ID: ${routeId}`, error);
+        console.error(`DEBUG (Israel Hiking): Ошибка при загрузке или отображении маршрута Israel Hiking Map для ID: ${routeId}`, error);
         // Убедимся, что полилайн удален в случае ошибки
         if (israelHikingPolyline && map.hasLayer(israelHikingPolyline)) {
             map.removeLayer(israelHikingPolyline);
         }
         israelHikingPolyline = null;
     }
+    console.log(`DEBUG (Israel Hiking): Завершение fetchAndDisplayIsraelHikingRoute для ID: ${routeId}`);
 }
 
 
@@ -212,7 +235,7 @@ function initMap() {
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
-            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(map);
 
         map.on('click', handleMapClick); // Обработчик кликов по карте
