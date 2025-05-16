@@ -1,4 +1,4 @@
-// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.29 - Исправлен доступ к колонке R через mappings) ===
+// === ПОЛНЫЙ КОД JAVASCRIPT ВИДЖЕТА (Версия: v9.9.30 - Улучшенное логирование latlngs) ===
 
 // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let map;
@@ -124,13 +124,35 @@ async function fetchAndDisplayIsraelHikingRoute(routeId) {
         }
         const data = await response.json();
         console.log(`DEBUG (Israel Hiking): Ответ API успешно распарсен в JSON.`);
+        // --- Начало улучшенного логирования ---
+        console.log(`DEBUG (Israel Hiking): Полный объект data, полученный от API (глубокая копия):`, JSON.parse(JSON.stringify(data)));
+
+        if (data && data.hasOwnProperty('latlngs')) {
+            console.log(`DEBUG (Israel Hiking): Ключ 'latlngs' СУЩЕСТВУЕТ в объекте data.`);
+            console.log(`DEBUG (Israel Hiking): Тип data.latlngs: ${typeof data.latlngs}`);
+            console.log(`DEBUG (Israel Hiking): Является ли data.latlngs массивом: ${Array.isArray(data.latlngs)}`);
+            if (Array.isArray(data.latlngs)) {
+                console.log(`DEBUG (Israel Hiking): Длина массива data.latlngs: ${data.latlngs.length}`);
+                if (data.latlngs.length > 0) {
+                    console.log(`DEBUG (Israel Hiking): Первый элемент data.latlngs (если есть):`, data.latlngs[0]);
+                }
+            } else {
+                console.log(`DEBUG (Israel Hiking): data.latlngs НЕ является массивом. Значение:`, data.latlngs);
+            }
+        } else {
+            console.log(`DEBUG (Israel Hiking): Ключ 'latlngs' ОТСУТСТВУЕТ в объекте data. Ключи объекта data: ${data ? Object.keys(data).join(', ') : 'data is null/undefined'}`);
+        }
+        // --- Конец улучшенного логирования ---
+
         if (israelHikingPolyline && map.hasLayer(israelHikingPolyline)) {
             console.log(`DEBUG (Israel Hiking): Удаление существующего полилайна Israel Hiking Map.`);
             map.removeLayer(israelHikingPolyline);
         }
         israelHikingPolyline = null;
-        if (data?.latlngs?.length > 0) {
-            console.log(`DEBUG (Israel Hiking): Найдено ${data.latlngs.length} точек маршрута в ответе API.`);
+
+        // Используем более строгую проверку
+        if (data && Array.isArray(data.latlngs) && data.latlngs.length > 0) {
+            console.log(`DEBUG (Israel Hiking): Условие для отрисовки пройдено. Найдено ${data.latlngs.length} точек.`);
             const latLngsArray = data.latlngs.map(point => [point.lat, point.lng]);
             console.log(`DEBUG (Israel Hiking): Точки маршрута преобразованы в формат Leaflet.`);
             if (latLngsArray.length > 0) { console.log(`DEBUG (Israel Hiking): Пример первых 3 точек: ${JSON.stringify(latLngsArray.slice(0,3))}`); }
@@ -139,7 +161,7 @@ async function fetchAndDisplayIsraelHikingRoute(routeId) {
             israelHikingPolyline.addTo(map);
             console.log(`DEBUG (Israel Hiking): Полилайн маршрута Israel Hiking Map добавлен на карту.`);
         } else {
-            console.warn(`DEBUG (Israel Hiking): В ответе API не найдены точки маршрута (latlngs) или массив пуст для ID: ${routeId}. Ответ:`, data);
+            console.warn(`DEBUG (Israel Hiking): Условие для отрисовки НЕ пройдено. Проверьте предыдущие логи по 'latlngs'. ID: ${routeId}. Объект data (как он есть):`, data);
         }
     } catch (error) {
         console.error(`DEBUG (Israel Hiking): Ошибка при загрузке или отображении маршрута Israel Hiking Map для ID: ${routeId}`, error);
@@ -318,9 +340,7 @@ async function processMeetingPointData(lat, lng, tableId) {
     } else { console.log("DEBUG: Нет данных для обновления в Grist (все поля пустые после обработки)."); }
 }
 
-// ИСПРАВЛЕННАЯ ФУНКЦИЯ
 async function handleGristRecordUpdate(record, mappings) {
-    // Логируем ПОЛНЫЙ record и mappings в самом начале
     console.log("DEBUG: Grist record update received. Full Record:", JSON.stringify(record));
     console.log("DEBUG: Grist record update received. Mappings:", JSON.stringify(mappings));
 
@@ -359,30 +379,17 @@ async function handleGristRecordUpdate(record, mappings) {
         return;
     }
 
-    // --- Helper function to get values using mappings ---
     const getVal = (fieldName) => {
         if (!mappings || !record) return undefined;
         const gristColId = mappings[fieldName];
-        if (gristColId && record.hasOwnProperty(gristColId)) {
-            return record[gristColId];
-        }
-        // Fallback if Grist column name is the same as widget field name and not explicitly in mappings
-        // (though Grist docs imply mappings should be comprehensive for user-mapped columns)
-        if (record.hasOwnProperty(fieldName) && (!mappings.hasOwnProperty(fieldName) || mappings[fieldName] === fieldName)) {
-             // This fallback might be risky if mappings are not always complete.
-             // console.warn(`DEBUG: Accessing record.${fieldName} directly as fallback.`);
-             // return record[fieldName];
-        }
-        if (gristColId === null) { // Explicitly unmapped
-             console.log(`DEBUG: Widget field '${fieldName}' is not mapped by the user.`);
-        }
+        if (gristColId && record.hasOwnProperty(gristColId)) { return record[gristColId]; }
+        if (gristColId === null) { console.log(`DEBUG: Widget field '${fieldName}' is not mapped by the user.`); }
         return undefined;
     };
 
-    // --- Обработка маркеров с использованием getVal ---
     const valX = getVal("X");
     const valY = getVal("Y");
-    const valHikeStartLabel = getVal("HikeStartLabel") || getVal("A"); // Example of fallback if HikeStartLabel is often mapped to A
+    const valHikeStartLabel = getVal("HikeStartLabel") || getVal("A");
 
     if (typeof valX === 'number' && typeof valY === 'number') {
         const label = valHikeStartLabel || `Старт маршрута (ID: ${currentRecordId})`;
@@ -398,16 +405,13 @@ async function handleGristRecordUpdate(record, mappings) {
     if (typeof valB === 'number' && typeof valC === 'number') {
         const label = valA || `Место встречи (ID: ${currentRecordId})`;
         meetingPointMarker = updateOrCreateMarker(meetingPointMarker, { lat: valB, lng: valC }, label, blueIcon, true, onMeetingPointMarkerDragEnd);
-
         const valD = getVal("D");
         const valI = getVal("I");
         const valGoogleDrive = getVal("GoogleDrive");
         const valWaze = getVal("Waze");
-
         const meetingDataIsMissingOrEmpty = !valD || String(valD).trim() === '' || String(valD).includes("Адрес не найден") || String(valD).includes("Ошибка геокода") ||
                                            !valI || String(valI).trim() === '' || String(valI).includes("N/A") || String(valI).includes("Ошибка") ||
                                            !valGoogleDrive || !valWaze;
-
         if (tableId && (meetingPointJustUpdatedByAction || (lastProcessedRecordIdForMeetingPoint !== currentRecordId && meetingDataIsMissingOrEmpty))) {
             console.log(`DEBUG: Обработка данных для Места Встречи. Флаг justUpdated: ${meetingPointJustUpdatedByAction}, DataMissingOrEmpty: ${meetingDataIsMissingOrEmpty}, lastProcessedRecId: ${lastProcessedRecordIdForMeetingPoint}, currentRecId: ${currentRecordId}`);
             await processMeetingPointData(valB, valC, tableId);
@@ -434,16 +438,14 @@ async function handleGristRecordUpdate(record, mappings) {
         console.log("DEBUG: Координаты для 'Конца маршрута' (Z,AA) отсутствуют. Z:", valZ, "AA:", valAA);
     }
 
-    // --- Интеграция Israel Hiking Map (Колонка R) ---
-    const rWidgetFieldName = "R"; // Имя поля, как оно определено в grist.ready
+    const rWidgetFieldName = "R";
     const rGristColumnId = mappings && mappings.hasOwnProperty(rWidgetFieldName) ? mappings[rWidgetFieldName] : null;
     let israelHikingUrl = null;
 
     if (rGristColumnId && record && record.hasOwnProperty(rGristColumnId)) {
-        israelHikingUrl = record[rGristColumnId]; // Получаем значение из фактической колонки Grist
+        israelHikingUrl = record[rGristColumnId];
         console.log(`DEBUG (Israel Hiking): Для поля виджета '${rWidgetFieldName}', колонка Grist '${rGristColumnId}' имеет значение: "${israelHikingUrl}" (тип: ${typeof israelHikingUrl})`);
     } else {
-        // Подробное логирование причин, почему URL не был получен
         if (!record) { console.log(`DEBUG (Israel Hiking): Record is null. Cannot access data for widget field '${rWidgetFieldName}'.`); }
         else if (!mappings) { console.log(`DEBUG (Israel Hiking): Mappings object is null. Cannot determine Grist column for widget field '${rWidgetFieldName}'.`); }
         else if (!mappings.hasOwnProperty(rWidgetFieldName)) { console.log(`DEBUG (Israel Hiking): Widget field '${rWidgetFieldName}' (title: 'Ссылка Israel Hiking Map') not found in mappings object. Mappings:`, JSON.stringify(mappings)); }
@@ -452,7 +454,6 @@ async function handleGristRecordUpdate(record, mappings) {
     }
 
     const israelHikingUrlPattern = /https:\/\/israelhiking\.osm\.org\.il\/(?:share\/|view\/)?([a-zA-Z0-9_-]+)/;
-
     if (israelHikingUrl && typeof israelHikingUrl === 'string') {
         const match = israelHikingUrl.match(israelHikingUrlPattern);
         if (match && match[1]) {
@@ -467,7 +468,6 @@ async function handleGristRecordUpdate(record, mappings) {
         console.log(`DEBUG (Israel Hiking): Итоговое значение israelHikingUrl пустое, null или не строка (значение: "${israelHikingUrl}", тип: ${typeof israelHikingUrl}). Маршрут Israel Hiking Map не будет отображен.`);
         if (israelHikingPolyline && map.hasLayer(israelHikingPolyline)) { map.removeLayer(israelHikingPolyline); israelHikingPolyline = null; }
     }
-    // --- Конец интеграции Israel Hiking Map ---
 
     const activeMapElements = [meetingPointMarker, routeStartMarker, endRouteMarker, israelHikingPolyline].filter(el => el !== null && map.hasLayer(el));
     if (activeMapElements.length > 0) {
@@ -558,8 +558,6 @@ async function handleMapClick(event) {
     const { lat: clickedLat, lng: clickedLng } = event.latlng;
     const clickPosition = { lat: clickedLat, lng: clickedLng };
 
-    // Используем getVal для проверки существования маркеров, т.к. они зависят от данных в Grist
-    // Однако, здесь мы проверяем сами переменные маркеров, т.к. они отражают состояние на карте
     if (!meetingPointMarker) {
         const label = `Место встречи (ID: ${currentRecordId})`;
         console.log(`DEBUG: Клик для установки "Место встречи" (синий): ${clickedLat}, ${clickedLng}.`);
@@ -595,6 +593,6 @@ function checkApis() {
         setTimeout(checkApis, 250);
     }
 }
-console.log("DEBUG: grist_map_widget_hiking.js (v9.9.29 - Исправлен доступ к колонке R): Запуск checkApis.");
+console.log("DEBUG: grist_map_widget_hiking.js (v9.9.30 - Улучшенное логирование latlngs): Запуск checkApis.");
 checkApis();
 // === КОНЕЦ СКРИПТА ===
